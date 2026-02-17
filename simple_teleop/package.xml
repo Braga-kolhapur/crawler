@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>simple_teleop</name>
+  <version>0.0.0</version>
+  <description>Simple keyboard teleop publishing geometry_msgs/msg/TwistStamped</description>
+  <maintainer email="maintainer@example.com">maintainer</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+
+  <exec_depend>python3</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+
+</package>
