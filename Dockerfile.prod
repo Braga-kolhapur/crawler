@@ -4,6 +4,10 @@ FROM working:2
 # Use bash for all RUN commands
 SHELL ["/bin/bash", "-c"]
 
+# Clean up the old workspace from base image
+RUN rm -rf /home/ubuntu/ros2_ws && \
+    mkdir -p /home/ubuntu/ros2_ws/src
+
 # Install system dependencies early (rarely changes, can be cached)
 # Combine apt operations to reduce layers
 RUN apt-get update && \
@@ -16,9 +20,6 @@ RUN rosdep update --rosdistro $ROS_DISTRO
 
 # Set working directory
 WORKDIR /home/ubuntu/ros2_ws
-
-# Create src directory
-RUN mkdir -p /home/ubuntu/ros2_ws/src
 
 # Copy the crawler repository contents directly into src directory
 # This is done after system setup so code changes don't invalidate earlier layers
