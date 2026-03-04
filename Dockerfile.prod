@@ -4,6 +4,9 @@ FROM working:2
 # Use bash for all RUN commands
 SHELL ["/bin/bash", "-c"]
 
+# Update apt cache first
+RUN apt-get update && apt-get upgrade -y
+
 # Set working directory
 WORKDIR /home/ubuntu/ros2_ws
 
@@ -15,7 +18,7 @@ RUN mkdir -p /home/ubuntu/ros2_ws/src
 COPY . /home/ubuntu/ros2_ws/src/crawler/
 
 # Install any additional dependencies needed for the workspace
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get install -y --no-install-recommends \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -23,8 +26,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN rosdep update --rosdistro $ROS_DISTRO
 
 # Install package dependencies
+# Skip keys that can't be resolved to avoid build failure
 RUN source /opt/ros/jazzy/setup.bash && \
-    rosdep install --from-paths src --ignore-src -r -y
+    rosdep install --from-paths src --ignore-src -r -y \
+    --skip-keys ament_python \
+    --skip-keys py_trees \
+    --skip-keys joy \
+    --skip-keys joy_teleop
 
 # Build the workspace with colcon
 RUN source /opt/ros/jazzy/setup.bash && \
