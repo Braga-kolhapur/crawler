@@ -13,9 +13,9 @@ WORKDIR /home/ubuntu/ros2_ws
 # Create src directory
 RUN mkdir -p /home/ubuntu/ros2_ws/src
 
-# Copy the crawler repository contents into src directory
-# This assumes the build context is the crawler repo root
-COPY . /home/ubuntu/ros2_ws/src/crawler/
+# Copy the crawler repository contents directly into src directory
+# This copies all packages (create_behavior_tree, libcreate, etc.) into src/
+COPY . /home/ubuntu/ros2_ws/src/
 
 # Install any additional dependencies needed for the workspace
 RUN apt-get install -y --no-install-recommends \
