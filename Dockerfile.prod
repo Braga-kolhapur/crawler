@@ -7,8 +7,12 @@ SHELL ["/bin/bash", "-c"]
 # Set working directory
 WORKDIR /home/ubuntu/ros2_ws
 
-# Copy the entire workspace (this will be done via docker build context)
-# The build script will handle mounting/copying the source code
+# Create src directory
+RUN mkdir -p /home/ubuntu/ros2_ws/src
+
+# Copy the crawler repository contents into src directory
+# This assumes the build context is the crawler repo root
+COPY . /home/ubuntu/ros2_ws/src/crawler/
 
 # Install any additional dependencies needed for the workspace
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -18,17 +22,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Update rosdep to ensure dependencies are available
 RUN rosdep update --rosdistro $ROS_DISTRO
 
+# Install package dependencies
+RUN source /opt/ros/jazzy/setup.bash && \
+    rosdep install --from-paths src --ignore-src -r -y
+
+# Build the workspace with colcon
+RUN source /opt/ros/jazzy/setup.bash && \
+    colcon build --symlink-install && \
+    source install/setup.bash
+
 # Default environment setup
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc && \
     echo "if [ -f install/setup.bash ]; then source install/setup.bash; fi" >> /root/.bashrc
-
-# Build the workspace
-RUN if [ -d src ]; then \
-        source /opt/ros/jazzy/setup.bash && \
-        rosdep install --from-paths src --ignore-src -r -y && \
-        colcon build --symlink-install && \
-        source install/setup.bash; \
-    fi
 
 # Default command
 CMD ["bash"]

@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 # Configuration
 WORKSPACE_DIR="${1:-.}"
 IMAGE_NAME="${2:-crawler:latest}"
-DOCKERFILE_PATH="${3:-./scripts/Dockerfile.prod}"
+DOCKERFILE_PATH="${3:-./Dockerfile.prod}"
 BUILD_TAG="robot-build-$(date +%s)"
 
 # Function to print colored output
@@ -30,9 +30,9 @@ print_warning() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
-# Validate workspace
-if [ ! -d "$WORKSPACE_DIR/src" ]; then
-    print_error "ROS2 workspace 'src' directory not found at $WORKSPACE_DIR/src"
+# Validate workspace directory exists
+if [ ! -d "$WORKSPACE_DIR" ]; then
+    print_error "Workspace directory not found at $WORKSPACE_DIR"
     exit 1
 fi
 
@@ -42,9 +42,10 @@ if [ ! -f "$DOCKERFILE_PATH" ]; then
 fi
 
 print_status "Starting Docker build process..."
-print_status "Workspace: $WORKSPACE_DIR"
+print_status "Build context: $WORKSPACE_DIR (crawler repo)"
 print_status "Image name: $IMAGE_NAME"
 print_status "Dockerfile: $DOCKERFILE_PATH"
+print_status "Note: Source code will be copied into image and built with colcon"
 
 # Check if working:2 image exists
 print_status "Verifying base image 'working:2' exists..."
