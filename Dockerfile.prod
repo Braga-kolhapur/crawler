@@ -38,12 +38,17 @@ WORKDIR /home/ubuntu/ros2_ws
 COPY . /home/ubuntu/ros2_ws/src/
 
 # Install package dependencies from source
+# Skip keys for packages we install via pip or that aren't available
 RUN source /opt/ros/jazzy/setup.bash && \
     rosdep install --from-paths src --ignore-src -r -y \
     --skip-keys ament_python \
     --skip-keys py_trees \
     --skip-keys joy \
-    --skip-keys joy_teleop
+    --skip-keys joy_teleop \
+    --skip-keys pyyaml \
+    --skip-keys slam_toolbox \
+    --skip-keys nav2_bringup \
+    --skip-keys nav2_map_server || echo "Some rosdep dependencies could not be installed, continuing..."
 
 # Build the workspace with colcon
 RUN source /opt/ros/jazzy/setup.bash && \

@@ -15,10 +15,11 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
 
-  <!-- ROS2 packages this HMI works with -->
-  <exec_depend>slam_toolbox</exec_depend>
-  <exec_depend>nav2_bringup</exec_depend>
-  <exec_depend>nav2_map_server</exec_depend>
+  <!-- ROS2 packages this HMI works with (optional, installed separately if needed) -->
+  <!-- These are optional - HMI will launch them if available, but doesn't require them to run -->
+  <!-- <exec_depend>slam_toolbox</exec_depend> -->
+  <!-- <exec_depend>nav2_bringup</exec_depend> -->
+  <!-- <exec_depend>nav2_map_server</exec_depend> -->
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
