@@ -1,0 +1,34 @@
+# Use the pre-built working:2 image as base
+FROM working:2
+
+# Use bash for all RUN commands
+SHELL ["/bin/bash", "-c"]
+
+# Set working directory
+WORKDIR /home/ubuntu/ros2_ws
+
+# Copy the entire workspace (this will be done via docker build context)
+# The build script will handle mounting/copying the source code
+
+# Install any additional dependencies needed for the workspace
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Update rosdep to ensure dependencies are available
+RUN rosdep update --rosdistro $ROS_DISTRO
+
+# Default environment setup
+RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc && \
+    echo "if [ -f install/setup.bash ]; then source install/setup.bash; fi" >> /root/.bashrc
+
+# Build the workspace
+RUN if [ -d src ]; then \
+        source /opt/ros/jazzy/setup.bash && \
+        rosdep install --from-paths src --ignore-src -r -y && \
+        colcon build --symlink-install && \
+        source install/setup.bash; \
+    fi
+
+# Default command
+CMD ["bash"]

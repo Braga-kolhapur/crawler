@@ -5,22 +5,32 @@ import termios
 import tty
 import threading
 import time
+import argparse
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import Twist, TwistStamped
 
 
 class TeleopNode(Node):
-    def __init__(self):
+    def __init__(self, use_stamped=False):
         super().__init__('simple_teleop')
-        self.pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
+        self.use_stamped = use_stamped
+        
+        if use_stamped:
+            self.pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
+            self.get_logger().info('simple_teleop started (using TwistStamped)')
+        else:
+            self.pub = self.create_publisher(Twist, '/cmd_vel', 10)
+            self.get_logger().info('simple_teleop started (using Twist)')
+        
+        # Always store twist data as Twist object internally
+        self._twist = Twist()
+        self._twist.linear.x = 0.0
+        self._twist.angular.z = 0.0
+        
         self._lock = threading.Lock()
-        self._twist = TwistStamped()
-        self._twist.twist.linear.x = 0.0
-        self._twist.twist.angular.z = 0.0
         self._running = True
-        self.get_logger().info('simple_teleop started')
         thread = threading.Thread(target=self._publisher_loop)
         thread.daemon = True
         thread.start()
@@ -30,19 +40,24 @@ class TeleopNode(Node):
         delay = 1.0 / rate_hz
         while rclpy.ok() and self._running:
             with self._lock:
-                msg = TwistStamped()
-                msg.header.stamp = self.get_clock().now().to_msg()
-                msg.header.frame_id = 'base_link'
-                msg.twist = self._twist.twist
+                if self.use_stamped:
+                    msg = TwistStamped()
+                    msg.header.stamp = self.get_clock().now().to_msg()
+                    msg.header.frame_id = 'base_link'
+                    msg.twist = self._twist
+                else:
+                    msg = Twist()
+                    msg.linear.x = self._twist.linear.x
+                    msg.angular.z = self._twist.angular.z
                 self.pub.publish(msg)
             time.sleep(delay)
 
     def set_twist(self, linear=None, angular=None):
         with self._lock:
             if linear is not None:
-                self._twist.twist.linear.x = float(linear)
+                self._twist.linear.x = float(linear)
             if angular is not None:
-                self._twist.twist.angular.z = float(angular)
+                self._twist.angular.z = float(angular)
 
     def stop(self):
         self.set_twist(0.0, 0.0)
@@ -61,11 +76,17 @@ def _get_key(timeout=0.1):
 
 
 def main(args=None):
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Simple ROS2 Teleop Node')
+    parser.add_argument('--stamped', action='store_true', 
+                        help='Use TwistStamped message type instead of Twist')
+    parsed_args = parser.parse_args(args)
+    
     settings = termios.tcgetattr(sys.stdin)
     try:
         tty.setcbreak(sys.stdin.fileno())
         rclpy.init(args=args)
-        node = TeleopNode()
+        node = TeleopNode(use_stamped=parsed_args.stamped)
 
         # Speed control variables
         current_linear_speed = 0.0
@@ -77,6 +98,10 @@ def main(args=None):
 
         print('Use arrow keys to move (repeated presses increase speed)')
         print('Press "k" to stop, space to stop, q to quit')
+        if parsed_args.stamped:
+            print('Publishing: TwistStamped messages')
+        else:
+            print('Publishing: Twist messages')
         try:
             while rclpy.ok():
                 key = _get_key(0.1)
