@@ -33,12 +33,18 @@ RUN rosdep update --rosdistro $ROS_DISTRO
 # Set working directory
 WORKDIR /home/ubuntu/ros2_ws
 
-# Copy the crawler repository contents directly into src directory
-# This is done after system setup so code changes don't invalidate earlier layers
-COPY . /home/ubuntu/ros2_ws/src/
+# ========================================================================
+# OPTIMIZATION: Copy and build STABLE packages first (rarely change)
+# This creates a cached layer that won't rebuild unless these packages change
+# ========================================================================
 
-# Install package dependencies from source
-# Skip keys for packages we install via pip or that aren't available
+# Copy only stable packages first
+COPY all_create_robot/ /home/ubuntu/ros2_ws/src/all_create_robot/
+COPY libcreate/ /home/ubuntu/ros2_ws/src/libcreate/
+COPY rplidar_ros/ /home/ubuntu/ros2_ws/src/rplidar_ros/
+COPY cus_nav2_config/ /home/ubuntu/ros2_ws/src/cus_nav2_config/
+
+# Install dependencies for stable packages only
 RUN source /opt/ros/jazzy/setup.bash && \
     rosdep install --from-paths src --ignore-src -r -y \
     --skip-keys ament_python \
@@ -50,10 +56,44 @@ RUN source /opt/ros/jazzy/setup.bash && \
     --skip-keys nav2_bringup \
     --skip-keys nav2_map_server || echo "Some rosdep dependencies could not be installed, continuing..."
 
-# Build the workspace with colcon
+# Build stable packages (THIS LAYER WILL BE CACHED!)
 RUN source /opt/ros/jazzy/setup.bash && \
-    colcon build --symlink-install && \
-    source install/setup.bash
+    colcon build --symlink-install \
+    --packages-select \
+        create_msgs \
+        create_description \
+        libcreate \
+        create_driver \
+        create_bringup \
+        create_robot \
+        rplidar_ros \
+        cus_nav2_config && \
+    echo "Stable packages built and cached"
+
+# ========================================================================
+# Copy and build FREQUENTLY CHANGING packages (web_hmi, behavior_tree, etc.)
+# Only this layer rebuilds when you change these packages
+# ========================================================================
+
+# Copy frequently changing packages
+COPY web_hmi/ /home/ubuntu/ros2_ws/src/web_hmi/
+COPY create_behavior_tree/ /home/ubuntu/ros2_ws/src/create_behavior_tree/
+COPY simple_teleop/ /home/ubuntu/ros2_ws/src/simple_teleop/
+COPY scripts/ /home/ubuntu/ros2_ws/src/scripts/
+
+# Copy any remaining files (README, etc.)
+COPY README.md /home/ubuntu/ros2_ws/src/ 2>/dev/null || true
+COPY *.md /home/ubuntu/ros2_ws/src/ 2>/dev/null || true
+
+# Build the remaining packages (only these rebuild on changes)
+RUN source /opt/ros/jazzy/setup.bash && \
+    source install/setup.bash && \
+    colcon build --symlink-install \
+    --packages-select \
+        web_hmi \
+        create_behavior_tree \
+        simple_teleop && \
+    echo "Development packages built"
 
 # Setup environment (last, so it's always applied)
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc && \
