@@ -4,8 +4,15 @@ FROM working:2
 # Use bash for all RUN commands
 SHELL ["/bin/bash", "-c"]
 
-# Update apt cache first
-RUN apt-get update && apt-get upgrade -y
+# Install system dependencies early (rarely changes, can be cached)
+# Combine apt operations to reduce layers
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3-pip && \
+    rm -rf /var/lib/apt/lists/*
+
+# Update rosdep early (independent of source code)
+RUN rosdep update --rosdistro $ROS_DISTRO
 
 # Set working directory
 WORKDIR /home/ubuntu/ros2_ws
@@ -14,19 +21,10 @@ WORKDIR /home/ubuntu/ros2_ws
 RUN mkdir -p /home/ubuntu/ros2_ws/src
 
 # Copy the crawler repository contents directly into src directory
-# This copies all packages (create_behavior_tree, libcreate, etc.) into src/
+# This is done after system setup so code changes don't invalidate earlier layers
 COPY . /home/ubuntu/ros2_ws/src/
 
-# Install any additional dependencies needed for the workspace
-RUN apt-get install -y --no-install-recommends \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Update rosdep to ensure dependencies are available
-RUN rosdep update --rosdistro $ROS_DISTRO
-
-# Install package dependencies
-# Skip keys that can't be resolved to avoid build failure
+# Install package dependencies from source
 RUN source /opt/ros/jazzy/setup.bash && \
     rosdep install --from-paths src --ignore-src -r -y \
     --skip-keys ament_python \
@@ -39,7 +37,7 @@ RUN source /opt/ros/jazzy/setup.bash && \
     colcon build --symlink-install && \
     source install/setup.bash
 
-# Default environment setup
+# Setup environment (last, so it's always applied)
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc && \
     echo "if [ -f install/setup.bash ]; then source install/setup.bash; fi" >> /root/.bashrc
 
