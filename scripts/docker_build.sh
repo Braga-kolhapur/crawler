@@ -17,16 +17,24 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Configuration
-WORKSPACE_DIR="${1:-.}"
-IMAGE_NAME="${2:-crawler:latest}"
-DOCKERFILE_PATH="${3:-./Dockerfile.prod}"
-NO_CACHE_FLAG=""
-
 # Check if --no-cache flag is provided
+NO_CACHE_FLAG=""
 if [[ "$@" == *"--no-cache"* ]]; then
     NO_CACHE_FLAG="--no-cache"
 fi
+
+# Filter out flags from positional arguments
+FILTERED_ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" != "--no-cache" ]]; then
+        FILTERED_ARGS+=("$arg")
+    fi
+done
+
+# Configuration
+WORKSPACE_DIR="${FILTERED_ARGS[0]:-.}"
+IMAGE_NAME="${FILTERED_ARGS[1]:-crawler:latest}"
+DOCKERFILE_PATH="${FILTERED_ARGS[2]:-./Dockerfile.prod}"
 
 BUILD_TAG="robot-build-$(date +%s)"
 
