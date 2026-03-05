@@ -61,7 +61,6 @@ WORKDIR /home/ubuntu/ros2_ws
 COPY all_create_robot/ /home/ubuntu/ros2_ws/src/all_create_robot/
 COPY libcreate/ /home/ubuntu/ros2_ws/src/libcreate/
 COPY rplidar_ros/ /home/ubuntu/ros2_ws/src/rplidar_ros/
-COPY cus_nav2_config/ /home/ubuntu/ros2_ws/src/cus_nav2_config/
 
 # Install dependencies for stable packages only
 RUN source /opt/ros/jazzy/setup.bash && \
@@ -96,6 +95,7 @@ COPY web_hmi/ /home/ubuntu/ros2_ws/src/web_hmi/
 COPY create_behavior_tree/ /home/ubuntu/ros2_ws/src/create_behavior_tree/
 COPY simple_teleop/ /home/ubuntu/ros2_ws/src/simple_teleop/
 COPY scripts/ /home/ubuntu/ros2_ws/src/scripts/
+COPY cus_nav2_config/ /home/ubuntu/ros2_ws/src/cus_nav2_config/
 
 # Build the remaining packages (only these rebuild on changes)
 RUN source /opt/ros/jazzy/setup.bash && \
