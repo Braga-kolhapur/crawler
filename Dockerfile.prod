@@ -97,10 +97,6 @@ COPY create_behavior_tree/ /home/ubuntu/ros2_ws/src/create_behavior_tree/
 COPY simple_teleop/ /home/ubuntu/ros2_ws/src/simple_teleop/
 COPY scripts/ /home/ubuntu/ros2_ws/src/scripts/
 
-# Copy any remaining files (README, etc.)
-COPY README.md /home/ubuntu/ros2_ws/src/ 2>/dev/null || true
-COPY *.md /home/ubuntu/ros2_ws/src/ 2>/dev/null || true
-
 # Build the remaining packages (only these rebuild on changes)
 RUN source /opt/ros/jazzy/setup.bash && \
     source install/setup.bash && \
