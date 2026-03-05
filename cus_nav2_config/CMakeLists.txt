@@ -24,8 +24,15 @@ if(BUILD_TESTING)
 endif()
 
 install(
-  DIRECTORY launch maps params
+  DIRECTORY launch maps params paths
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(
+  PROGRAMS
+    scripts/ros2_plan_publisher
+    scripts/coverage_path_follower
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_package()

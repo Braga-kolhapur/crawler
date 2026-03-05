@@ -13,7 +13,7 @@
   --bg:#0d1117; --surf:#161b22; --surf2:#21262d; --border:#30363d;
   --text:#c9d1d9; --dim:#6e7681; --accent:#1f6feb;
   --green:#22c55e; --orange:#f97316; --red:#ef4444; --blue:#60a5fa;
-  --hdr:52px; --tabs:40px; --top:92px; --bot:245px; --man-bot:170px;
+  --hdr:52px; --tabs:40px; --top:92px; --bot:245px; --man-bot:108px;
 }
 html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
   color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
@@ -29,6 +29,14 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
 .ros-dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
 .ros-dot.off{background:var(--red)}
 #ros-lbl{font-size:11px;color:var(--dim)}
+
+/* Sim checkbox pill */
+.sim-label{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim);
+  cursor:pointer;padding:5px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--surf2);transition:border-color .15s,color .15s;
+  white-space:nowrap;user-select:none}
+.sim-label input{margin:0;cursor:pointer;accent-color:var(--accent)}
+.sim-label.active{border-color:var(--accent);color:var(--blue)}
 
 /* ── Tab bar ────────────────────────────────────────────────────── */
 #tab-bar{position:fixed;top:var(--hdr);left:0;right:0;height:var(--tabs);
@@ -139,9 +147,22 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
 #auto-nd-row{display:flex;gap:14px;padding-top:6px;flex-shrink:0}
 .auto-nd-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--dim)}
 
-/* ── Joystick area (MANUAL tab) ─────────────────────────────────── */
+/* ── MANUAL TAB — split view (left=map, right=joystick) ─────────── */
 #joy-wrap{position:fixed;top:var(--top);left:0;right:0;bottom:var(--man-bot);
-  background:#000;overflow:hidden;touch-action:none;display:none}
+  overflow:hidden;display:none;flex-direction:row}
+
+/* Left half — live SLAM map */
+#map-half{flex:1;background:#000;overflow:hidden;position:relative;
+  border-right:1px solid var(--border)}
+#map-full-canvas{display:block;width:100%;height:100%;image-rendering:pixelated}
+.map-half-lbl{position:absolute;bottom:0;left:0;right:0;
+  background:rgba(0,0,0,.6);text-align:center;font-size:9px;
+  color:var(--dim);padding:2px 0;pointer-events:none}
+#map-half-empty{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;color:var(--dim);font-size:11px;pointer-events:none}
+
+/* Right half — joystick */
+#joy-half{flex:1;background:#111;overflow:hidden;position:relative}
 #joy-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 
 /* Speed overlay */
@@ -154,18 +175,10 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
   min-width:52px;text-align:right}
 .sp-unit{font-size:10px}
 
-/* Live map picture-in-picture */
-#live-map-pip{position:absolute;top:10px;right:10px;width:130px;height:130px;
-  background:var(--surf2);border:1px solid var(--border);border-radius:8px;
-  overflow:hidden}
-#live-map-canvas{width:100%;height:100%;image-rendering:pixelated;display:block}
-.pip-lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.65);
-  text-align:center;font-size:9px;color:var(--dim);padding:2px 0}
-
-/* ── Manual bottom panel (MANUAL tab) ──────────────────────────── */
+/* ── Manual bottom panel ────────────────────────────────────────── */
 #manual-panel{position:fixed;left:0;right:0;bottom:0;height:var(--man-bot);
   background:var(--surf);border-top:1px solid var(--border);
-  display:none;flex-direction:column;z-index:200;padding:10px 14px;gap:7px}
+  display:none;flex-direction:column;z-index:200;padding:8px 14px;gap:6px}
 
 /* Node status dots */
 .nd{display:inline-block;width:8px;height:8px;border-radius:50%;
@@ -177,21 +190,23 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
 
 /* Manual action buttons */
 .man-btns{display:flex;gap:6px}
-.man-btn{flex:1;padding:11px 6px;border-radius:8px;border:1px solid var(--border);
+.man-btn{flex:1;padding:10px 6px;border-radius:8px;border:1px solid var(--border);
   background:var(--surf2);color:var(--text);font-size:12px;font-weight:600;
-  cursor:pointer;transition:opacity .15s,transform .1s;-webkit-font-smoothing:antialiased}
+  cursor:pointer;transition:all .15s;-webkit-font-smoothing:antialiased}
 .man-btn:active{opacity:.7;transform:scale(.97)}
 .man-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
-.man-btn-g{border-color:var(--green);color:var(--green)}
-.man-btn-r{border-color:var(--red);color:var(--red)}
+/* State-specific button colours */
+.man-btn-go{border-color:var(--green);color:var(--green)}
+.man-btn-stop{border-color:var(--red);color:var(--red)}
+.man-btn-active{border-color:var(--accent);color:var(--blue);background:rgba(31,111,235,.12)}
 
 /* Save map row */
 .save-row{display:flex;gap:6px;align-items:center}
-.save-row input{flex:1;padding:9px 10px;background:var(--surf2);
+.save-row input{flex:1;padding:7px 10px;background:var(--surf2);
   border:1px solid var(--border);color:var(--text);border-radius:8px;
   font-size:12px;outline:none;min-width:0}
 .save-row input:focus{border-color:var(--accent)}
-.save-row .man-btn{flex:0 0 auto;padding:9px 12px}
+.save-row .man-btn{flex:0 0 auto;padding:7px 12px;font-size:11px}
 
 /* ── Toast ──────────────────────────────────────────────────────── */
 #toast{position:fixed;bottom:calc(var(--bot) + 10px);left:50%;
@@ -201,6 +216,7 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
   pointer-events:none;white-space:nowrap}
 #toast.show{opacity:1}
 #toast.manual-mode{bottom:calc(var(--man-bot) + 10px)}
+@keyframes obs-pulse{0%,100%{opacity:1}50%{opacity:.75}}
 </style>
 </head>
 <body>
@@ -208,9 +224,23 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
 <!-- ── HEADER ─────────────────────────────────────────────────────── -->
 <header id="hdr">
   <h1>Coverage HMI</h1>
+  <label class="sim-label" id="sim-label"
+         title="Sim mode: TwistStamped cmd_vel · use_sim_time · turtlebot3_gazebo">
+    <input type="checkbox" id="sim-check" onchange="onSimToggle(this.checked)">
+    Sim
+  </label>
   <span id="ros-lbl">ROS</span>
   <div class="ros-dot" id="ros-dot"></div>
 </header>
+
+<!-- ── OBSTACLE WARNING BANNER (fixed, hidden until detected) ──── -->
+<div id="obstacle-banner"
+     style="display:none;position:fixed;top:var(--hdr);left:0;right:0;z-index:190;
+            background:var(--red);color:#fff;text-align:center;padding:7px 14px;
+            font-size:13px;font-weight:700;letter-spacing:.4px;
+            box-shadow:0 2px 8px rgba(239,68,68,.5);animation:obs-pulse 1s ease-in-out infinite">
+  ⚠ OBSTACLE DETECTED — Robot Paused
+</div>
 
 <!-- ── TAB BAR ───────────────────────────────────────────────────── -->
 <div id="tab-bar">
@@ -258,9 +288,11 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
     <div id="seq-list"></div>
 
     <div id="controls">
-      <button class="cbtn cbtn-start" id="btn-start"  onclick="cmdStartAutonomy()">▶ Start Robot</button>
-      <button class="cbtn cbtn-pause" id="btn-pause"  onclick="cmdPause()" disabled>⏸ Pause</button>
-      <button class="cbtn cbtn-stop"  id="btn-stop"   onclick="cmdStopAutonomy()" disabled>⏹ Stop</button>
+      <button class="cbtn cbtn-start" id="btn-start"    onclick="cmdStartAutonomy()">▶ Start Robot</button>
+      <button class="cbtn cbtn-start" id="btn-coverage" onclick="cmdStartCoverage()" disabled
+              style="background:var(--blue)">▶ Start Coverage</button>
+      <button class="cbtn cbtn-pause" id="btn-pause"    onclick="cmdPause()" disabled>⏸ Pause</button>
+      <button class="cbtn cbtn-stop"  id="btn-stop"     onclick="cmdStopAutonomy()" disabled>⏹ Stop</button>
       <button class="cbtn cbtn-fit"   onclick="fitMap()" title="Fit map">⤢</button>
     </div>
 
@@ -269,6 +301,13 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
       <span class="auto-nd-item"><span class="nd" id="nd-amcl-auto"></span>AMCL</span>
       <span class="auto-nd-item"><span class="nd" id="nd-nav2-auto"></span>Nav2</span>
       <span class="auto-nd-item"><span class="nd" id="nd-slam-auto"></span>SLAM</span>
+      <span class="auto-nd-item"><span class="nd" id="nd-obstacle-auto"></span>Obstacle Det.</span>
+    </div>
+    <div style="padding-top:6px">
+      <button class="cbtn" id="btn-obstacle" onclick="cmdToggleObstacle()"
+              style="font-size:12px;padding:7px 14px;border-color:var(--orange);color:var(--orange)">
+        🛡 Obstacle Detector
+      </button>
     </div>
   </div>
 </div>
@@ -277,66 +316,60 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
      MANUAL TAB
      ══════════════════════════════════════════════════════════════ -->
 
-<!-- Joystick canvas area -->
-<div id="joy-wrap" class="manual-view" style="display:block">
-  <canvas id="joy-canvas"></canvas>
+<!-- Split view: left=live map, right=joystick (visible only when teleop ON) -->
+<div id="joy-wrap" class="manual-view" style="display:none">
 
-  <!-- Speed overlay (top-left) -->
-  <div id="speed-overlay">
-    <div class="sp-row">
-      <span class="sp-lbl">V</span>
-      <span class="sp-val" id="joy-linear">0.00</span>
-      <span class="sp-unit">m/s</span>
-    </div>
-    <div class="sp-row">
-      <span class="sp-lbl">ω</span>
-      <span class="sp-val" id="joy-angular">0.00</span>
-      <span class="sp-unit">rad/s</span>
-    </div>
+  <!-- Left half: live SLAM map -->
+  <div id="map-half">
+    <canvas id="map-full-canvas"></canvas>
+    <div class="map-half-lbl">Live Map (/map)</div>
+    <div id="map-half-empty">No /map data yet</div>
   </div>
 
-  <!-- Live SLAM map (top-right, picture-in-picture) -->
-  <div id="live-map-pip" title="Live /map topic">
-    <canvas id="live-map-canvas" width="130" height="130"></canvas>
-    <div class="pip-lbl">Live Map</div>
+  <!-- Right half: joystick + speed overlay -->
+  <div id="joy-half">
+    <canvas id="joy-canvas"></canvas>
+    <div id="speed-overlay">
+      <div class="sp-row">
+        <span class="sp-lbl">V</span>
+        <span class="sp-val" id="joy-linear">0.00</span>
+        <span class="sp-unit">m/s</span>
+      </div>
+      <div class="sp-row">
+        <span class="sp-lbl">ω</span>
+        <span class="sp-val" id="joy-angular">0.00</span>
+        <span class="sp-unit">rad/s</span>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- Manual controls panel -->
 <div id="manual-panel" class="manual-view" style="display:flex">
-  <!-- Robot Driver Section -->
-  <div class="sec-title" style="margin-bottom:2px">Robot Control</div>
 
-  <!-- Node status -->
+  <!-- Node status dots -->
   <div class="nd-row">
-    <span class="nd-item"><span class="nd" id="nd-robot"></span>Robot Driver</span>
+    <span class="nd-item"><span class="nd" id="nd-robot"></span>Robot</span>
     <span class="nd-item"><span class="nd" id="nd-slam"></span>SLAM</span>
     <span class="nd-item"><span class="nd" id="nd-amcl-m"></span>AMCL</span>
     <span class="nd-item"><span class="nd" id="nd-nav2-m"></span>Nav2</span>
   </div>
 
-  <!-- Robot start/stop -->
+  <!-- Action buttons: Robot toggle | Teleop toggle | Mapping toggle -->
   <div class="man-btns">
-    <button class="man-btn man-btn-g" id="btn-start-robot"
-            onclick="cmdStartRobot()">▶ Start Robot</button>
-    <button class="man-btn man-btn-r" id="btn-stop-robot"
-            onclick="cmdStopRobot()" disabled>⏹ Stop Robot</button>
+    <button class="man-btn man-btn-go" id="btn-robot"
+            onclick="cmdToggleRobot()">▶ Start Robot</button>
+    <button class="man-btn" id="btn-teleop"
+            onclick="cmdToggleTeleop()">🕹 Teleop</button>
+    <button class="man-btn man-btn-go" id="btn-mapping"
+            onclick="cmdToggleMapping()">▶ Mapping</button>
   </div>
 
-  <div class="sec-title" style="margin-bottom:2px;margin-top:10px">Mapping</div>
-
-  <!-- Mapping start/stop -->
-  <div class="man-btns">
-    <button class="man-btn man-btn-g" id="btn-start-mapping"
-            onclick="cmdStartMapping()">▶ Start Mapping</button>
-    <button class="man-btn man-btn-r" id="btn-stop-mapping"
-            onclick="cmdStopMapping()" disabled>⏹ Stop Mapping</button>
-  </div>
-
-  <!-- Save map -->
-  <div class="save-row">
-    <input id="map-name" type="text" placeholder="map name" value="my_map"
-           autocomplete="off" autocorrect="off" spellcheck="false">
+  <!-- Map name row — only visible while mapping is active -->
+  <div class="save-row" id="map-save-row" style="display:none">
+    <input id="map-name" type="text" value="map_001"
+           autocomplete="off" autocorrect="off" spellcheck="false"
+           placeholder="map name">
     <button class="man-btn" onclick="cmdSaveMap()" style="white-space:nowrap">
       💾 Save Map
     </button>
@@ -359,8 +392,16 @@ let appSt  = {
 };
 let visitedSet  = new Set();   // "zone:idx"
 let mapImg      = null;
-let nodeStatus  = {robot:false, slam:false, amcl:false, nav2:false};
+let nodeStatus  = {robot:false, slam:false, amcl:false, nav2:false, obstacle:false};
 let currentTab  = 'manual';
+
+// Manual-tab state
+let simMode    = false;
+let teleopOn   = false;
+let mappingOn  = false;
+let robotOn    = false;
+let obstacleOn = false;   // obstacle detector process running
+let _mapCounter = 1;
 
 // Zone palette
 const PALETTE = ['#E74C3C','#3498DB','#2ECC71','#F39C12','#9B59B6',
@@ -377,6 +418,7 @@ socket.on('disconnect',  ()  => { appSt.ros_connected=false; updateRos(false); }
 socket.on('state',       (s) => applyState(s));
 socket.on('node_status', (ns)=> { nodeStatus={...nodeStatus,...ns}; updateNodeStatusUI(); });
 socket.on('toast',       (m) => toast(m));
+socket.on('obstacle_detected', (d) => setObstacleBanner(d.detected));
 
 function applyState(s) {
   appSt = {...appSt, ...s};
@@ -398,27 +440,29 @@ function switchTab(tab) {
   const auto   = tab === 'auto';
   const manual = tab === 'manual';
 
-  // Show/hide auto views
-  document.getElementById('map-wrap')   .style.display = auto   ? '' : 'none';
-  document.getElementById('bot-panel')  .style.display = auto   ? 'flex' : 'none';
-
-  // Show/hide manual views
-  document.getElementById('joy-wrap')    .style.display = manual ? '' : 'none';
+  document.getElementById('map-wrap')    .style.display = auto   ? '' : 'none';
+  document.getElementById('bot-panel')   .style.display = auto   ? 'flex' : 'none';
   document.getElementById('manual-panel').style.display = manual ? 'flex' : 'none';
 
-  // Toast position
+  // joy-wrap only shows in manual tab AND when teleop is active
+  document.getElementById('joy-wrap').style.display =
+    (manual && teleopOn) ? 'flex' : 'none';
+
   document.getElementById('toast').classList.toggle('manual-mode', manual);
 
   if (manual) {
-    resizeJoy();
-    if (!_joyRafRunning) { _joyRafRunning = true; joyLoop(); }
+    if (teleopOn) {
+      resizeMapHalf();
+      resizeJoy();
+      if (!_joyRafRunning) { _joyRafRunning = true; joyLoop(); }
+    }
     startLiveMapPoll();
     fetch('/api/node_status').then(r=>r.json()).then(ns => {
       nodeStatus = {...nodeStatus, ...ns};
       updateNodeStatusUI();
     });
   } else {
-    stopCmdVelLoop();
+    if (!teleopOn) stopCmdVelLoop();
     stopLiveMapPoll();
   }
 }
@@ -431,9 +475,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // INITIAL LOAD
 // ════════════════════════════════════════════════════════════════════
 function init() {
-  // Kick off manual mode (default tab) immediately
-  resizeJoy();
-  if (!_joyRafRunning) { _joyRafRunning = true; joyLoop(); }
   startLiveMapPoll();
 
   Promise.all([
@@ -871,12 +912,31 @@ function initDragSort(list) {
 // ════════════════════════════════════════════════════════════════════
 function cmdStartAutonomy() {
   socket.emit('start_autonomy', {sequence: appSt.sequence});
-  toast('Launching AMCL + Nav2…');
+  toast('Launching AMCL + Nav2… Set initial pose then press Start Coverage');
+}
+
+function cmdStartCoverage() {
+  socket.emit('start_coverage');
+  toast('▶ Coverage started');
 }
 
 function cmdStopAutonomy() {
   socket.emit('stop_autonomy');
   toast('⏹ Stopping all autonomy');
+}
+
+function cmdToggleObstacle() {
+  if (obstacleOn) {
+    socket.emit('stop_obstacle_detector');
+  } else {
+    socket.emit('start_obstacle_detector');
+    toast('Starting obstacle detector…');
+  }
+}
+
+function setObstacleBanner(detected) {
+  const banner = document.getElementById('obstacle-banner');
+  if (banner) banner.style.display = detected ? 'block' : 'none';
 }
 
 function cmdPause() {
@@ -892,11 +952,13 @@ function fitMap() {
 }
 
 function updateButtons() {
-  const running = appSt.is_running;
-  const paused  = appSt.is_paused;
-  document.getElementById('btn-start').disabled = running && !paused;
-  document.getElementById('btn-pause').disabled = !running;
-  document.getElementById('btn-stop') .disabled = !running;
+  const running  = appSt.is_running;
+  const paused   = appSt.is_paused;
+  const autoUp   = nodeStatus.autonomy;
+  document.getElementById('btn-start')   .disabled = autoUp;
+  document.getElementById('btn-coverage').disabled = !autoUp || running;
+  document.getElementById('btn-pause')   .disabled = !running;
+  document.getElementById('btn-stop')    .disabled = !autoUp;
   document.getElementById('btn-pause').textContent = paused ? '▶ Resume' : '⏸ Pause';
 }
 
@@ -934,10 +996,26 @@ document.getElementById('bot-handle').addEventListener('click', () => {
 // ════════════════════════════════════════════════════════════════════
 function updateNodeStatusUI() {
   // Auto tab dots
-  const autoMap = {amcl:'nd-amcl-auto', nav2:'nd-nav2-auto', slam:'nd-slam-auto'};
-  for (const [k, id] of Object.entries(autoMap)) {
-    const el = document.getElementById(id);
+  ['amcl', 'nav2', 'slam'].forEach(k => {
+    const el = document.getElementById(`nd-${k}-auto`);
     if (el) el.className = 'nd ' + (nodeStatus[k] ? 'on' : 'off');
+  });
+
+  // Obstacle detector dot + button
+  obstacleOn = nodeStatus.obstacle;
+  const elObs = document.getElementById('nd-obstacle-auto');
+  if (elObs) elObs.className = 'nd ' + (obstacleOn ? 'on' : 'off');
+  const btnObs = document.getElementById('btn-obstacle');
+  if (btnObs) {
+    if (obstacleOn) {
+      btnObs.style.borderColor = 'var(--red)';
+      btnObs.style.color       = 'var(--red)';
+      btnObs.textContent       = '⏹ Obstacle Det.';
+    } else {
+      btnObs.style.borderColor = 'var(--orange)';
+      btnObs.style.color       = 'var(--orange)';
+      btnObs.textContent       = '🛡 Obstacle Detector';
+    }
   }
   // Manual tab dots
   const manMap = {robot:'nd-robot', slam:'nd-slam', amcl:'nd-amcl-m', nav2:'nd-nav2-m'};
@@ -945,16 +1023,115 @@ function updateNodeStatusUI() {
     const el = document.getElementById(id);
     if (el) el.className = 'nd ' + (nodeStatus[k] ? 'on' : 'off');
   }
-  // Manual robot buttons
-  const btnSR = document.getElementById('btn-start-robot');
-  const btnXR = document.getElementById('btn-stop-robot');
-  if (btnSR) btnSR.disabled = nodeStatus.robot;
-  if (btnXR) btnXR.disabled = !nodeStatus.robot;
-  // Manual mapping buttons
-  const btnSM = document.getElementById('btn-start-mapping');
-  const btnXM = document.getElementById('btn-stop-mapping');
-  if (btnSM) btnSM.disabled = nodeStatus.slam;
-  if (btnXM) btnXM.disabled = !nodeStatus.slam;
+
+  // Robot toggle button
+  robotOn = nodeStatus.robot;
+  const btnR = document.getElementById('btn-robot');
+  if (btnR) {
+    if (robotOn) {
+      btnR.className   = 'man-btn man-btn-stop';
+      btnR.textContent = '⏹ Stop Robot';
+    } else {
+      btnR.className   = 'man-btn man-btn-go';
+      btnR.textContent = '▶ Start Robot';
+    }
+  }
+
+  // Mapping toggle button + save row visibility
+  const wasMapping = mappingOn;
+  mappingOn = nodeStatus.slam;
+  const btnM = document.getElementById('btn-mapping');
+  if (btnM) {
+    if (mappingOn) {
+      btnM.className   = 'man-btn man-btn-stop';
+      btnM.textContent = '⏹ Mapping';
+    } else {
+      btnM.className   = 'man-btn man-btn-go';
+      btnM.textContent = '▶ Mapping';
+    }
+  }
+  // Sync save row with actual mapping state
+  const saveRow = document.getElementById('map-save-row');
+  if (saveRow) saveRow.style.display = mappingOn ? 'flex' : 'none';
+  document.documentElement.style.setProperty(
+    '--man-bot', mappingOn ? '154px' : '108px');
+  // Pre-fill map name when mapping starts
+  if (mappingOn && !wasMapping) {
+    document.getElementById('map-name').value = _nextMapName();
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SIM MODE
+// ════════════════════════════════════════════════════════════════════
+function onSimToggle(checked) {
+  simMode = checked;
+  document.getElementById('sim-label').classList.toggle('active', checked);
+  socket.emit('set_sim', {sim: checked});
+  toast(checked ? 'Sim ON — TwistStamped · use_sim_time' : 'Sim OFF — Twist · real robot');
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MANUAL TAB — ROBOT / TELEOP / MAPPING TOGGLES
+// ════════════════════════════════════════════════════════════════════
+function cmdToggleRobot() {
+  if (robotOn) {
+    socket.emit('stop_robot');
+    toast('Stopping robot…');
+  } else {
+    socket.emit('start_robot');
+    toast(simMode ? 'Starting TurtleBot3 Gazebo…' : 'Starting Create 2…');
+  }
+}
+
+function cmdToggleTeleop() {
+  teleopOn = !teleopOn;
+  const btn  = document.getElementById('btn-teleop');
+  const wrap = document.getElementById('joy-wrap');
+
+  if (teleopOn) {
+    btn.className   = 'man-btn man-btn-active';
+    btn.textContent = '⏹ Teleop';
+    if (currentTab === 'manual') {
+      wrap.style.display = 'flex';
+      resizeMapHalf();
+      resizeJoy();
+      if (!_joyRafRunning) { _joyRafRunning = true; joyLoop(); }
+    }
+  } else {
+    btn.className   = 'man-btn';
+    btn.textContent = '🕹 Teleop';
+    wrap.style.display = 'none';
+    joyActive = false;
+    joyDX = 0; joyDY = 0;
+    stopCmdVelLoop();
+  }
+}
+
+function cmdToggleMapping() {
+  if (mappingOn) {
+    socket.emit('stop_mapping');
+    toast('Stopping mapping…');
+  } else {
+    socket.emit('start_mapping');
+    toast(simMode ? 'Starting SLAM (sim time)…' : 'Starting SLAM mapping…');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MANUAL TAB — MAP SAVE
+// ════════════════════════════════════════════════════════════════════
+function _nextMapName() {
+  return 'map_' + String(_mapCounter).padStart(3, '0');
+}
+
+function cmdSaveMap() {
+  const inp  = document.getElementById('map-name');
+  const name = (inp.value || '').trim() || _nextMapName();
+  socket.emit('save_map', {name});
+  // Optimistically advance counter
+  _mapCounter++;
+  inp.value = _nextMapName();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -973,17 +1150,17 @@ const joyCanvas = document.getElementById('joy-canvas');
 const joyCtx    = joyCanvas.getContext('2d');
 
 function resizeJoy() {
-  const wrap = document.getElementById('joy-wrap');
-  if (wrap.clientWidth === 0 || wrap.clientHeight === 0) return;
-  joyCanvas.width  = wrap.clientWidth;
-  joyCanvas.height = wrap.clientHeight;
+  const half = document.getElementById('joy-half');
+  if (!half || half.clientWidth === 0 || half.clientHeight === 0) return;
+  joyCanvas.width  = half.clientWidth;
+  joyCanvas.height = half.clientHeight;
 }
 new ResizeObserver(() => {
-  if (currentTab === 'manual') resizeJoy();
-}).observe(document.getElementById('joy-wrap'));
+  if (currentTab === 'manual' && teleopOn) resizeJoy();
+}).observe(document.getElementById('joy-half'));
 
 function joyLoop() {
-  if (currentTab !== 'manual') { _joyRafRunning = false; return; }
+  if (currentTab !== 'manual' || !teleopOn) { _joyRafRunning = false; return; }
   drawJoy();
   requestAnimationFrame(joyLoop);
 }
@@ -997,25 +1174,25 @@ function drawJoy() {
   const R  = Math.min(cx, cy) * 0.65;
   const TR = R * 0.28;
 
-  // Outer ring (made more visible)
+  // Outer ring
   joyCtx.beginPath();
   joyCtx.arc(cx, cy, R, 0, Math.PI * 2);
-  joyCtx.fillStyle = 'rgba(96,165,250,0.08)';  // Brighter blue tint
+  joyCtx.fillStyle = 'rgba(96,165,250,0.08)';
   joyCtx.fill();
-  joyCtx.strokeStyle = 'rgba(96,165,250,0.5)';  // Much more visible
+  joyCtx.strokeStyle = 'rgba(96,165,250,0.5)';
   joyCtx.lineWidth = 3;
   joyCtx.stroke();
 
-  // Inner ring (made more visible)
+  // Inner ring
   joyCtx.beginPath();
   joyCtx.arc(cx, cy, R * 0.5, 0, Math.PI * 2);
-  joyCtx.strokeStyle = 'rgba(255,255,255,0.3)';  // More visible
+  joyCtx.strokeStyle = 'rgba(255,255,255,0.3)';
   joyCtx.lineWidth = 2;
   joyCtx.stroke();
 
-  // Crosshair lines (made more visible)
+  // Crosshair
   joyCtx.setLineDash([5, 5]);
-  joyCtx.strokeStyle = 'rgba(255,255,255,0.25)';  // More visible
+  joyCtx.strokeStyle = 'rgba(255,255,255,0.25)';
   joyCtx.lineWidth = 2;
   joyCtx.beginPath();
   joyCtx.moveTo(cx - R, cy); joyCtx.lineTo(cx + R, cy);
@@ -1023,34 +1200,34 @@ function drawJoy() {
   joyCtx.stroke();
   joyCtx.setLineDash([]);
 
-  // Direction labels (made more visible)
+  // Direction labels
   const fs = Math.max(16, Math.min(24, R * 0.18));
   joyCtx.font          = `bold ${fs}px sans-serif`;
-  joyCtx.fillStyle     = 'rgba(255,255,255,0.6)';  // Much more visible
+  joyCtx.fillStyle     = 'rgba(255,255,255,0.6)';
   joyCtx.textAlign     = 'center';
   joyCtx.textBaseline  = 'middle';
-  joyCtx.fillText('▲', cx,           cy - R * 0.76);
-  joyCtx.fillText('▼', cx,           cy + R * 0.76);
+  joyCtx.fillText('▲', cx,            cy - R * 0.76);
+  joyCtx.fillText('▼', cx,            cy + R * 0.76);
   joyCtx.fillText('◄', cx - R * 0.76, cy);
   joyCtx.fillText('►', cx + R * 0.76, cy);
   joyCtx.textBaseline = 'alphabetic';
 
-  // Thumb (made more visible)
+  // Thumb
   const tx = cx + (joyActive ? joyDX * R : 0);
   const ty = cy + (joyActive ? joyDY * R : 0);
   const g  = joyCtx.createRadialGradient(tx, ty, 0, tx, ty, TR);
   if (joyActive) {
     g.addColorStop(0, '#60a5fa');
-    g.addColorStop(1, 'rgba(59,130,246,0.5)');  // More visible when active
+    g.addColorStop(1, 'rgba(59,130,246,0.5)');
   } else {
-    g.addColorStop(0, 'rgba(255,255,255,0.9)');  // Much more visible when idle
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
     g.addColorStop(1, 'rgba(255,255,255,0.3)');
   }
   joyCtx.beginPath();
   joyCtx.arc(tx, ty, TR, 0, Math.PI * 2);
   joyCtx.fillStyle   = g;
   joyCtx.fill();
-  joyCtx.strokeStyle = joyActive ? '#3b82f6' : 'rgba(255,255,255,0.7)';  // More visible
+  joyCtx.strokeStyle = joyActive ? '#3b82f6' : 'rgba(255,255,255,0.7)';
   joyCtx.lineWidth   = 3;
   joyCtx.stroke();
 }
@@ -1124,11 +1301,22 @@ function stopCmdVelLoop() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// MANUAL TAB — LIVE MAP POLL
+// MANUAL TAB — LIVE MAP (left half of split view)
 // ════════════════════════════════════════════════════════════════════
+const mapFullCanvas = document.getElementById('map-full-canvas');
+const mapFullCtx    = mapFullCanvas.getContext('2d');
+
+function resizeMapHalf() {
+  const half = document.getElementById('map-half');
+  if (!half || half.clientWidth === 0 || half.clientHeight === 0) return;
+  mapFullCanvas.width  = half.clientWidth;
+  mapFullCanvas.height = half.clientHeight;
+}
+new ResizeObserver(() => {
+  if (currentTab === 'manual' && teleopOn) resizeMapHalf();
+}).observe(document.getElementById('map-half'));
+
 let _liveMapInterval = null;
-const liveMapCanvas = document.getElementById('live-map-canvas');
-const liveMapCtx    = liveMapCanvas.getContext('2d');
 
 function startLiveMapPoll() {
   if (_liveMapInterval) return;
@@ -1143,54 +1331,21 @@ function stopLiveMapPoll() {
 
 function fetchLiveMap() {
   fetch('/api/live_map_image').then(r => r.json()).then(d => {
-    const w = liveMapCanvas.width, h = liveMapCanvas.height;
-    liveMapCtx.clearRect(0, 0, w, h);
+    const w = mapFullCanvas.width, h = mapFullCanvas.height;
+    if (!w || !h) return;
+    mapFullCtx.clearRect(0, 0, w, h);
+    const emptyEl = document.getElementById('map-half-empty');
     if (!d.b64) {
-      liveMapCtx.fillStyle = '#0d1117';
-      liveMapCtx.fillRect(0, 0, w, h);
-      liveMapCtx.fillStyle    = 'rgba(255,255,255,0.18)';
-      liveMapCtx.font         = '9px sans-serif';
-      liveMapCtx.textAlign    = 'center';
-      liveMapCtx.textBaseline = 'middle';
-      liveMapCtx.fillText('No /map topic', w / 2, h / 2);
-      liveMapCtx.textBaseline = 'alphabetic';
+      mapFullCtx.fillStyle = '#0d1117';
+      mapFullCtx.fillRect(0, 0, w, h);
+      if (emptyEl) emptyEl.style.display = 'flex';
       return;
     }
+    if (emptyEl) emptyEl.style.display = 'none';
     const img = new Image();
-    img.onload = () => liveMapCtx.drawImage(img, 0, 0, w, h);
+    img.onload = () => mapFullCtx.drawImage(img, 0, 0, w, h);
     img.src = 'data:image/png;base64,' + d.b64;
   }).catch(() => {});
-}
-
-// ════════════════════════════════════════════════════════════════════
-// MANUAL TAB — ROBOT CONTROL COMMANDS
-// ════════════════════════════════════════════════════════════════════
-function cmdStartRobot() {
-  socket.emit('start_robot');
-  toast('Starting robot driver…');
-}
-
-function cmdStopRobot() {
-  socket.emit('stop_robot');
-  toast('Stopping robot driver…');
-}
-
-// ════════════════════════════════════════════════════════════════════
-// MANUAL TAB — MAPPING COMMANDS
-// ════════════════════════════════════════════════════════════════════
-function cmdStartMapping() {
-  socket.emit('start_mapping');
-  toast('Starting SLAM mapping…');
-}
-
-function cmdStopMapping() {
-  socket.emit('stop_mapping');
-  toast('Stopping mapping…');
-}
-
-function cmdSaveMap() {
-  const name = (document.getElementById('map-name').value || '').trim() || 'my_map';
-  socket.emit('save_map', {name});
 }
 
 // ════════════════════════════════════════════════════════════════════

@@ -1,0 +1,26 @@
+obstacle_detector_node:
+  ros__parameters:
+
+    # ── Scan topic ────────────────────────────────────────────────────────────
+    scan_topic: /scan           # topic to subscribe to (sensor_msgs/LaserScan)
+
+    # ── Box filter (metres, in the sensor / base_link frame) ──────────────────
+    # Only points whose (x, y) fall inside this rectangle are considered.
+    # Adjust these to match your robot's footprint + a safety margin.
+    x_min: -0.5                 # rear  limit  (negative = behind the sensor origin)
+    x_max:  0.5                 # front limit
+    y_min: -0.5                 # right limit  (negative = right side in ROS convention)
+    y_max:  0.5                 # left  limit
+
+    # ── Clustering ────────────────────────────────────────────────────────────
+    # Points are grouped by proximity in scan order (consecutive LiDAR rays).
+    # A "cluster" is a run of points where every adjacent pair is < cluster_distance apart.
+    cluster_distance: 0.15      # [m] max gap between consecutive points in the same cluster
+    min_cluster_size: 5         # min number of points required to count as a real cluster
+
+    # ── Trigger ───────────────────────────────────────────────────────────────
+    min_clusters: 1             # how many qualifying clusters needed to trigger detection
+
+    # ── Behaviour ─────────────────────────────────────────────────────────────
+    auto_pause: true            # publish /coverage_stop True when obstacle is active
+                                # set false to only publish /obstacle_detected without pausing

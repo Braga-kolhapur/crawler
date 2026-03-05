@@ -45,7 +45,7 @@ try:
     import rclpy
     from rclpy.node import Node
     from std_msgs.msg import Bool, String
-    from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
+    from geometry_msgs.msg import PoseWithCovarianceStamped, Twist, TwistStamped
     from nav_msgs.msg import OccupancyGrid
     HAS_ROS2 = True
 except ImportError:
@@ -96,9 +96,25 @@ _st: Dict[str, Any] = {
     "ros_connected": False,
     "live_map_b64":  "",      # latest OccupancyGrid as PNG base64
 }
-_plan_dir = "."
-_ros_node = None
+_plan_dir  = "."
+_maps_dir  = "."   # resolved at startup to cus_nav2_config/maps/ if available
+_ros_node  = None
+_use_stamped = False  # set by main() before starting ROS thread
+_sim_mode    = False  # toggled by UI sim checkbox
 _procs: Dict[str, Any] = {}  # tracked child subprocesses
+
+
+def _resolve_maps_dir() -> str:
+    """Return the maps/ directory of cus_nav2_config if the package is installed."""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        pkg = get_package_share_directory('cus_nav2_config')
+        d = os.path.join(pkg, 'maps')
+        os.makedirs(d, exist_ok=True)
+        return d
+    except Exception:
+        pass
+    return "."
 
 
 # ── State helpers ─────────────────────────────────────────────────────────────
@@ -119,11 +135,16 @@ def _snapshot() -> dict:
 
 
 def _node_status() -> dict:
+    def _running(key):
+        return key in _procs and _procs[key].poll() is None
     return {
-        "robot": "robot" in _procs and _procs["robot"].poll() is None,
-        "slam": "slam" in _procs and _procs["slam"].poll() is None,
-        "amcl": "amcl" in _procs and _procs["amcl"].poll() is None,
-        "nav2": "nav2" in _procs and _procs["nav2"].poll() is None,
+        "robot":    _running("robot"),
+        "slam":     _running("slam"),
+        "autonomy": _running("autonomy"),
+        "obstacle": _running("obstacle"),
+        # legacy keys kept for UI back-compat
+        "amcl":     _running("autonomy"),
+        "nav2":     _running("autonomy"),
     }
 
 
@@ -157,6 +178,8 @@ def load_plan(path: str) -> bool:
         with open(path) as f:
             plan = json.load(f)
         _plan_dir = str(Path(path).resolve().parent)
+        # Cache resolved plan path for autonomy launch
+        on_start_autonomy._plan_file_cache = str(Path(path).resolve())
         with _lock:
             _st["plan"]         = plan
             _st["sequence"]     = list(plan.get("sequence", []))
@@ -173,7 +196,19 @@ def _map_image_b64() -> str:
     """Read the map PGM referenced by the plan and return a PNG as base64."""
     with _lock:
         pgm = _st["plan"].get("map", {}).get("pgm_file", "map.pgm")
-    for candidate in [os.path.join(_plan_dir, pgm), pgm]:
+
+    # Only look in cus_nav2_config/maps/
+    candidates = []
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        pkg_maps = os.path.join(get_package_share_directory('cus_nav2_config'), 'maps')
+        candidates.append(os.path.join(pkg_maps, os.path.basename(pgm)))
+        import glob as _glob
+        candidates.extend(_glob.glob(os.path.join(pkg_maps, '*.pgm')))
+    except Exception:
+        pass
+
+    for candidate in candidates:
         if os.path.exists(candidate):
             try:
                 img = Image.open(candidate).convert("RGB")
@@ -226,12 +261,24 @@ def _stop_all_nodes():
 
 if HAS_ROS2:
     class _Bridge(Node):
-        def __init__(self):
+        def __init__(self, use_stamped=False):
             super().__init__("coverage_hmi")
+            self._use_stamped = use_stamped
             self._pub_stop   = self.create_publisher(Bool,   "/coverage_stop",     10)
-            self._pub_start  = self.create_publisher(Bool,   "/coverage_start",    10)
             self._pub_seq    = self.create_publisher(String, "/coverage_sequence", 10)
-            self._pub_cmdvel = self.create_publisher(Twist,  "/cmd_vel",           10)
+
+            # TRANSIENT_LOCAL so coverage_path_follower receives the start signal
+            # even if it subscribes slightly after the message is published
+            from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
+            _start_qos = QoSProfile(depth=1)
+            _start_qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
+            _start_qos.reliability = ReliabilityPolicy.RELIABLE
+            self._pub_start  = self.create_publisher(Bool, "/coverage_start", _start_qos)
+            if use_stamped:
+                self._pub_cmdvel = self.create_publisher(TwistStamped, "/cmd_vel", 10)
+                self.get_logger().info("HMI cmd_vel publisher using TwistStamped")
+            else:
+                self._pub_cmdvel = self.create_publisher(Twist, "/cmd_vel", 10)
 
             self.create_subscription(String, "/coverage_status",
                                      self._cb_status, 10)
@@ -247,6 +294,8 @@ if HAS_ROS2:
             except Exception:
                 map_qos = 1  # fallback to depth-only QoS
             self.create_subscription(OccupancyGrid, "/map", self._cb_map, map_qos)
+            self.create_subscription(Bool, "/obstacle_detected",
+                                     self._cb_obstacle, 10)
 
             with _lock:
                 _st["ros_connected"] = True
@@ -271,6 +320,9 @@ if HAS_ROS2:
                 _st["robot_y"] = ry
                 _mark_visited(rx, ry)
             sio.emit("state", _snapshot())
+
+        def _cb_obstacle(self, msg: Bool):
+            sio.emit("obstacle_detected", {"detected": msg.data})
 
         def _cb_map(self, msg: OccupancyGrid):
             """Convert OccupancyGrid to PNG and store as base64."""
@@ -315,16 +367,23 @@ if HAS_ROS2:
             self._pub_seq.publish(String(data=json.dumps(seq)))
 
         def pub_cmdvel(self, linear_x: float, angular_z: float):
-            t = Twist()
-            t.linear.x  = float(linear_x)
-            t.angular.z = float(angular_z)
-            self._pub_cmdvel.publish(t)
+            if self._use_stamped:
+                msg = TwistStamped()
+                msg.header.stamp = self.get_clock().now().to_msg()
+                msg.header.frame_id = 'base_link'
+                msg.twist.linear.x  = float(linear_x)
+                msg.twist.angular.z = float(angular_z)
+            else:
+                msg = Twist()
+                msg.linear.x  = float(linear_x)
+                msg.angular.z = float(angular_z)
+            self._pub_cmdvel.publish(msg)
 
 
 def _ros_thread():
     global _ros_node
     rclpy.init()
-    _ros_node = _Bridge()
+    _ros_node = _Bridge(use_stamped=_use_stamped)
     try:
         rclpy.spin(_ros_node)
     finally:
@@ -441,9 +500,17 @@ def on_inject_pose(data):
 
 # ── SocketIO events — manual mode (teleop + mapping) ─────────────────────────
 
+@sio.on("set_sim")
+def on_set_sim(data):
+    """Toggle simulation mode from the UI sim checkbox."""
+    global _sim_mode, _use_stamped
+    _sim_mode    = bool((data or {}).get("sim", False))
+    _use_stamped = _sim_mode   # sim → TwistStamped, real → Twist
+
+
 @sio.on("cmd_vel")
 def on_cmd_vel(data):
-    """Publish Twist from virtual joystick."""
+    """Publish Twist/TwistStamped from virtual joystick."""
     lx = float(data.get("linear_x",  0))
     az = float(data.get("angular_z", 0))
     if _ros_node:
@@ -452,11 +519,11 @@ def on_cmd_vel(data):
 
 @sio.on("start_mapping")
 def on_start_mapping():
-    """Launch slam_toolbox for SLAM mapping."""
-    # Adjust the launch command for your ROS2 workspace / package name.
+    """Launch slam_toolbox for SLAM mapping (respects sim mode)."""
+    use_sim = "true" if _sim_mode else "false"
     _start_ros_node("slam", [
         "ros2", "launch", "slam_toolbox", "online_async_launch.py",
-        "use_sim_time:=false",
+        f"use_sim_time:={use_sim}",
     ])
     sio.emit("node_status", _node_status())
 
@@ -469,30 +536,50 @@ def on_stop_mapping():
 
 @sio.on("start_robot")
 def on_start_robot():
-    """Launch create_bringup create_2.launch for robot driver + sensors."""
-    _start_ros_node("robot", [
-        "ros2", "launch", "create_bringup", "create_2.launch",
-    ])
+    """Launch robot driver — turtlebot3_gazebo in sim mode, create_bringup + rplidar otherwise."""
+    if _sim_mode:
+        _start_ros_node("robot", [
+            "ros2", "launch", "turtlebot3_gazebo", "turtlebot3_world.launch.py",
+        ])
+        sio.emit("toast", "Starting TurtleBot3 Gazebo...")
+    else:
+        _start_ros_node("robot", [
+            "ros2", "launch", "create_bringup", "create_2.launch",
+        ])
+        _start_ros_node("rplidar", [
+            "ros2", "launch", "rplidar_ros", "rplidar_c1_launch.py",
+        ])
+        _start_ros_node("static_tf", [
+            "ros2", "run", "tf2_ros", "static_transform_publisher",
+            "0.25", "0", "0.15", "0", "0", "0", "base_link", "laser",
+        ])
+        sio.emit("toast", "Starting Create 2 + RPLidar...")
     sio.emit("node_status", _node_status())
-    sio.emit("toast", "Starting robot driver...")
 
 
 @sio.on("stop_robot")
 def on_stop_robot():
-    """Stop the robot driver."""
-    # Send zero velocity first to stop the robot
+    """Stop the robot driver and any associated hardware nodes."""
     if _ros_node:
         _ros_node.pub_cmdvel(0.0, 0.0)
     _stop_ros_node("robot")
+    _stop_ros_node("rplidar")
+    _stop_ros_node("static_tf")
     sio.emit("node_status", _node_status())
     sio.emit("toast", "Stopping robot driver...")
 
 
 @sio.on("save_map")
 def on_save_map(data):
-    """Run map_saver_cli in a background thread to avoid blocking."""
-    name     = (data or {}).get("name", "my_map").strip().replace("/", "_") or "my_map"
-    out_path = os.path.join(_plan_dir, name)
+    """Run map_saver_cli in a background thread, saving into cus_nav2_config/maps/."""
+    name     = (data or {}).get("name", "map_001").strip().replace("/", "_") or "map_001"
+    maps_dir = _maps_dir
+    try:
+        os.makedirs(maps_dir, exist_ok=True)
+    except Exception as e:
+        sio.emit("toast", f"Cannot create maps dir: {e}")
+        return
+    out_path = os.path.join(maps_dir, name)
 
     def _do_save():
         try:
@@ -502,7 +589,7 @@ def on_save_map(data):
                 capture_output=True, text=True, timeout=15,
             )
             if r.returncode == 0:
-                sio.emit("toast", f"✓ Map saved: {name}.pgm / {name}.yaml")
+                sio.emit("toast", f"✓ Map saved: maps/{name}")
             else:
                 msg = (r.stderr or r.stdout or "unknown error")[:120]
                 sio.emit("toast", f"Save error: {msg}")
@@ -512,7 +599,7 @@ def on_save_map(data):
             sio.emit("toast", f"Save failed: {e}")
 
     threading.Thread(target=_do_save, daemon=True).start()
-    sio.emit("toast", f"Saving map → {out_path}…")
+    sio.emit("toast", f"Saving → maps/{name}…")
 
 
 # ── SocketIO events — auto / autonomy mode ────────────────────────────────────
@@ -520,49 +607,96 @@ def on_save_map(data):
 @sio.on("start_autonomy")
 def on_start_autonomy(data=None):
     """
-    Kill any teleop node, launch AMCL + Nav2, then start the coverage plan.
-    Adjust launch commands for your specific ROS2 setup / package names.
+    Launch the full autonomous coverage stack via cus_nav2_config auto_mode.launch.py
+    (map_server + amcl + controller_server + plan_publisher + path_follower).
     """
     _stop_ros_node("teleop")
 
-    map_yaml = os.path.join(_plan_dir, "map.yaml")
-    _start_ros_node("amcl", [
-        "ros2", "launch", "nav2_bringup", "localization_launch.py",
-        f"map:={map_yaml}", "use_sim_time:=false",
-    ])
-    _start_ros_node("nav2", [
-        "ros2", "launch", "nav2_bringup", "navigation_launch.py",
-        "use_sim_time:=false",
-    ])
+    # Resolve map yaml from cus_nav2_config/maps/
+    map_yaml = ""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        pkg = get_package_share_directory('cus_nav2_config')
+        map_yaml = os.path.join(pkg, 'maps', 'map123.yaml')
+    except Exception:
+        pass
 
-    seq = (data or {}).get("sequence", [])
-    with _lock:
-        _st["is_running"] = True
-        _st["is_paused"]  = False
-        if seq:
-            _st["sequence"] = seq
-    if _ros_node:
-        _ros_node.pub_start()
-        if seq:
-            _ros_node.pub_seq(seq)
+    # Resolve plan file from cus_nav2_config/paths/
+    import glob as _glob
+    plan_file = ""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        pkg = get_package_share_directory('cus_nav2_config')
+        candidates = sorted(_glob.glob(os.path.join(pkg, 'paths', '*.json')))
+        if candidates:
+            plan_file = candidates[0]
+    except Exception:
+        pass
+
+    use_sim = "true" if _sim_mode else "false"
+    cmd = [
+        "ros2", "launch", "cus_nav2_config", "auto_mode.launch.py",
+        f"map:={map_yaml}",
+        f"use_sim_time:={use_sim}",
+        f"stamped_cmd_vel:={use_sim}",
+    ]
+    if plan_file:
+        cmd.append(f"plan_file:={plan_file}")
+
+    _start_ros_node("autonomy", cmd)
 
     sio.emit("state", _snapshot())
     sio.emit("node_status", _node_status())
+    sio.emit("toast", "Autonomy stack started — set initial pose, then press Start Coverage")
 
 
 @sio.on("stop_autonomy")
 def on_stop_autonomy():
-    """Kill all navigation nodes and bring the robot to a halt."""
+    """Kill the autonomy launch group and bring the robot to a halt."""
     with _lock:
         _st["is_running"] = False
         _st["is_paused"]  = False
     if _ros_node:
         _ros_node.pub_stop(True)
         _ros_node.pub_cmdvel(0.0, 0.0)
-    _stop_ros_node("amcl")
-    _stop_ros_node("nav2")
+    _stop_ros_node("autonomy")
     sio.emit("state", _snapshot())
     sio.emit("node_status", _node_status())
+
+
+@sio.on("start_coverage")
+def on_start_coverage():
+    """Send /coverage_start=True after AMCL has converged and initial pose is set."""
+    if _ros_node:
+        _ros_node.pub_start()
+    with _lock:
+        _st["is_running"] = True
+        _st["is_paused"]  = False
+    sio.emit("state", _snapshot())
+    sio.emit("toast", "Coverage started")
+
+
+# ── SocketIO events — obstacle detector ──────────────────────────────────────
+
+@sio.on("start_obstacle_detector")
+def on_start_obstacle_detector():
+    """Launch the obstacle detector node."""
+    use_sim = "true" if _sim_mode else "false"
+    _start_ros_node("obstacle", [
+        "ros2", "launch", "obstacle_detector", "obstacle_detector.launch.py",
+        f"use_sim_time:={use_sim}",
+    ])
+    sio.emit("node_status", _node_status())
+    sio.emit("toast", "Obstacle detector started")
+
+
+@sio.on("stop_obstacle_detector")
+def on_stop_obstacle_detector():
+    """Stop the obstacle detector node and clear any active obstacle state."""
+    _stop_ros_node("obstacle")
+    sio.emit("obstacle_detected", {"detected": False})
+    sio.emit("node_status", _node_status())
+    sio.emit("toast", "Obstacle detector stopped")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -592,22 +726,40 @@ def main():
                 argv = argv[:argv.index('--ros-args')]
 
     ap = argparse.ArgumentParser(description="Coverage HMI web server")
-    ap.add_argument("plan_file", nargs="?", default="coverage_plan.json")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=5006)
+    ap.add_argument("--stamped", action="store_true",
+                    help="Publish cmd_vel as TwistStamped instead of Twist")
     args = ap.parse_args(argv)
 
-    if os.path.exists(args.plan_file):
-        load_plan(args.plan_file)
-        print(f"[hmi] Plan loaded: {args.plan_file}")
+    global _use_stamped, _maps_dir
+    _use_stamped = args.stamped
+    _maps_dir    = _resolve_maps_dir()
+
+    # Auto-discover plan from cus_nav2_config/paths/
+    plan_file = None
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        import glob as _glob
+        pkg_paths = os.path.join(
+            get_package_share_directory('cus_nav2_config'), 'paths')
+        candidates = sorted(_glob.glob(os.path.join(pkg_paths, '*.json')))
+        if candidates:
+            plan_file = candidates[0]
+    except Exception:
+        pass
+
+    if plan_file and os.path.exists(plan_file):
+        load_plan(plan_file)
+        print(f"[hmi] Plan loaded: {plan_file}")
     else:
-        print(f"[hmi] Warning: plan file not found: {args.plan_file}")
-        print("[hmi]   Start the server anyway; load a plan via the UI.")
+        print("[hmi] No plan found in cus_nav2_config/paths/ — server ready without a plan.")
 
     if HAS_ROS2:
         t = threading.Thread(target=_ros_thread, daemon=True)
         t.start()
-        print("[hmi] ROS2 bridge started")
+        msg_type = "TwistStamped" if _use_stamped else "Twist"
+        print(f"[hmi] ROS2 bridge started (cmd_vel: {msg_type})")
     else:
         print("[hmi] ROS2 not available — running in standalone / demo mode")
 
