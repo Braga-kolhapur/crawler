@@ -18,6 +18,25 @@ RUN apt-get update && \
     python3-yaml && \
     rm -rf /var/lib/apt/lists/*
 
+# Install Nav2 and SLAM Toolbox from apt (binary packages, cached layer)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ros-jazzy-navigation2 \
+    ros-jazzy-nav2-bringup \
+    ros-jazzy-slam-toolbox \
+    ros-jazzy-nav2-map-server \
+    ros-jazzy-nav2-amcl \
+    ros-jazzy-nav2-lifecycle-manager \
+    ros-jazzy-nav2-bt-navigator \
+    ros-jazzy-nav2-planner \
+    ros-jazzy-nav2-controller \
+    ros-jazzy-nav2-smoother \
+    ros-jazzy-nav2-waypoint-follower \
+    ros-jazzy-nav2-velocity-smoother \
+    ros-jazzy-nav2-collision-monitor \
+    ros-jazzy-nav2-rviz-plugins && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install web_hmi Python packages via pip (for latest versions)
 # Use --break-system-packages since we're in a container
 RUN pip3 install --break-system-packages \
@@ -51,10 +70,7 @@ RUN source /opt/ros/jazzy/setup.bash && \
     --skip-keys py_trees \
     --skip-keys joy \
     --skip-keys joy_teleop \
-    --skip-keys pyyaml \
-    --skip-keys slam_toolbox \
-    --skip-keys nav2_bringup \
-    --skip-keys nav2_map_server || echo "Some rosdep dependencies could not be installed, continuing..."
+    --skip-keys pyyaml || echo "Some rosdep dependencies could not be installed, continuing..."
 
 # Build stable packages (THIS LAYER WILL BE CACHED!)
 RUN source /opt/ros/jazzy/setup.bash && \
