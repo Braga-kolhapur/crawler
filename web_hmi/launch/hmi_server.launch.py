@@ -42,7 +42,6 @@ def generate_launch_description():
     )
 
     _common_args = [
-        LaunchConfiguration('plan_file'),
         '--host', LaunchConfiguration('host'),
         '--port', LaunchConfiguration('port'),
     ]
