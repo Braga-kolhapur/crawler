@@ -161,7 +161,7 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='base_link_to_laser',
         output='screen',
-        arguments=['0.25', '0', '0.15', '0', '0', '0', 'base_link', 'laser'],
+        arguments=['0.11', '0', '0.15', '0', '0', '3.14159', 'base_link', 'laser'],
         condition=UnlessCondition(LaunchConfiguration('use_sim_time')),
     )
 

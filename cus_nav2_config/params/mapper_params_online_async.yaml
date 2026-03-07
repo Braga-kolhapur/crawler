@@ -23,11 +23,11 @@ slam_toolbox:
     debug_logging: false
 
     # Scan processing
-    throttle_scans: 1
+    throttle_scans: 3            # process every 3rd scan — reduces Create 2 motor vibration noise
     transform_publish_period: 0.02
     map_update_interval: 5.0
     resolution: 0.05
-    max_laser_range: 10.0        # RPLidar C1 max range - 12m, but we set it lower to improve performance and reduce noise
+    max_laser_range: 10.0        # RPLidar C1 max range 12m, lower = less noise at range edges
     minimum_time_interval: 0.5
     transform_timeout: 0.2
     tf_buffer_duration: 30.0
@@ -38,9 +38,9 @@ slam_toolbox:
     use_scan_barycenter: true
     minimum_travel_distance: 0.2
     minimum_travel_heading: 0.2
-    scan_buffer_size: 10
+    scan_buffer_size: 20         # more scans buffered = better match averaging
     scan_buffer_maximum_scan_distance: 10.0
-    link_match_minimum_response_fine: 0.1
+    link_match_minimum_response_fine: 0.35   # was 0.1 — reject poor quality scan matches
     link_scan_maximum_distance: 1.5
 
     # Loop closure
@@ -62,8 +62,8 @@ slam_toolbox:
     loop_search_space_smear_deviation: 0.03
 
     # Scan matcher penalties
-    distance_variance_penalty: 0.5
-    angle_variance_penalty: 1.0
+    distance_variance_penalty: 0.9   # was 0.5 — penalise uncertain matches more
+    angle_variance_penalty: 1.2      # was 1.0 — penalise angular uncertainty more
     fine_search_angle_offset: 0.00349
     coarse_search_angle_offset: 0.349
     coarse_angle_resolution: 0.0349

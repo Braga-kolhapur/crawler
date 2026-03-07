@@ -636,7 +636,7 @@ def on_start_autonomy(data=None):
     try:
         from ament_index_python.packages import get_package_share_directory
         pkg = get_package_share_directory('cus_nav2_config')
-        map_yaml = os.path.join(pkg, 'maps', 'map123.yaml')
+        map_yaml = os.path.join(pkg, 'maps', 'my_map.yaml')
     except Exception:
         pass
 

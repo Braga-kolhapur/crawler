@@ -118,13 +118,13 @@ class OdomTest(Node):
             )
             return
 
-        self._lin_vel = float(msg.data)   # m/s
+        self._lin_vel = float(msg.data) * 0.1   # scale: 1 → 0.1 m/s
         self._start_x = self._cur_x
         self._start_y = self._cur_y
         self._state   = 'distance'
         self.get_logger().info(
             f'Distance test started — target: {TARGET_DISTANCE_M} m, '
-            f'velocity: {self._lin_vel} m/s, '
+            f'velocity: {self._lin_vel:.2f} m/s (input={msg.data}), '
             f'start: ({self._start_x:.3f}, {self._start_y:.3f})'
         )
 

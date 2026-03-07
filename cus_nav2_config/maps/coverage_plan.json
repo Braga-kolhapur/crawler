@@ -2,16 +2,16 @@
   "version": "1.0",
   "tool": "coverage_path_planner",
   "map": {
-    "pgm_file": "map123.pgm",
-    "yaml_file": "map123.yaml",
+    "pgm_file": "my_map.pgm",
+    "yaml_file": "my_map.yaml",
     "resolution": 0.05,
     "origin": [
-      0.685,
-      -2.038,
+      -5.048,
+      -1.994,
       0
     ],
-    "width_px": 110,
-    "height_px": 110
+    "width_px": 142,
+    "height_px": 147
   },
   "sequence": [
     "a"
@@ -20,59 +20,122 @@
     "a": {
       "key": "a",
       "pixel_bounds": {
-        "x1": 85,
-        "y1": 54,
-        "x2": 97,
-        "y2": 74
+        "x1": 69,
+        "y1": 102,
+        "x2": 109,
+        "y2": 124
       },
       "world_bounds": {
-        "x_min": 4.935,
-        "y_min": -0.238,
-        "x_max": 5.535,
-        "y_max": 0.762
+        "x_min": -1.598,
+        "y_min": -0.844,
+        "x_max": 0.402,
+        "y_max": 0.256
       },
       "dimensions_m": {
-        "width": 0.6,
-        "height": 1.0
+        "width": 2.0,
+        "height": 1.1
       },
       "path_type": "boustrophedon",
       "robot_width_m": 0.3,
-      "angle_deg": 90.0,
+      "angle_deg": 15.0,
       "color": "#E74C3C",
       "waypoints": [
         {
-          "x": 5.385,
-          "y": -0.238,
-          "yaw": 1.5708,
+          "x": -0.1776,
+          "y": -0.844,
+          "yaw": 0.2618,
           "stripe": 0,
           "type": "coverage"
         },
         {
-          "x": 5.385,
-          "y": 0.762,
-          "yaw": 1.5708,
+          "x": 0.402,
+          "y": -0.6887,
+          "yaw": 0.2618,
           "stripe": 0,
           "type": "coverage"
         },
         {
-          "x": 5.085,
-          "y": 0.762,
-          "yaw": 3.1416,
+          "x": 0.402,
+          "y": -0.3781,
+          "yaw": 1.5708,
           "stripe": 1,
           "type": "transition"
         },
         {
-          "x": 5.085,
-          "y": 0.762,
-          "yaw": -1.5708,
+          "x": 0.402,
+          "y": -0.3781,
+          "yaw": -2.8798,
           "stripe": 1,
           "type": "coverage"
         },
         {
-          "x": 5.085,
-          "y": -0.238,
-          "yaw": -1.5708,
+          "x": -1.3367,
+          "y": -0.844,
+          "yaw": -2.8798,
           "stripe": 1,
+          "type": "coverage"
+        },
+        {
+          "x": -1.598,
+          "y": -0.6034,
+          "yaw": 2.3976,
+          "stripe": 2,
+          "type": "transition"
+        },
+        {
+          "x": -1.598,
+          "y": -0.6034,
+          "yaw": 0.2618,
+          "stripe": 2,
+          "type": "coverage"
+        },
+        {
+          "x": 0.402,
+          "y": -0.0675,
+          "yaw": 0.2618,
+          "stripe": 2,
+          "type": "coverage"
+        },
+        {
+          "x": 0.402,
+          "y": 0.243,
+          "yaw": 1.5708,
+          "stripe": 3,
+          "type": "transition"
+        },
+        {
+          "x": 0.402,
+          "y": 0.243,
+          "yaw": -2.8798,
+          "stripe": 3,
+          "type": "coverage"
+        },
+        {
+          "x": -1.598,
+          "y": -0.2929,
+          "yaw": -2.8798,
+          "stripe": 3,
+          "type": "coverage"
+        },
+        {
+          "x": -1.598,
+          "y": 0.0177,
+          "yaw": 1.5708,
+          "stripe": 4,
+          "type": "transition"
+        },
+        {
+          "x": -1.598,
+          "y": 0.0177,
+          "yaw": 0.2618,
+          "stripe": 4,
+          "type": "coverage"
+        },
+        {
+          "x": -0.7087,
+          "y": 0.256,
+          "yaw": 0.2618,
+          "stripe": 4,
           "type": "coverage"
         }
       ]

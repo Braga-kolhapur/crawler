@@ -95,6 +95,7 @@ class CoverageZone:
     path_type: str = "boustrophedon"
     robot_width: float = DEFAULT_ROBOT_WIDTH   # metres
     angle: float = 0.0                  # stripe direction, degrees
+    rect_angle: float = 0.0             # rotation of the drawn rectangle itself, degrees
     color: str = "#E74C3C"
     waypoints: List[Dict] = field(default_factory=list)
 
@@ -108,8 +109,27 @@ class CoverageZone:
     @property
     def bottom(self): return max(self.y1, self.y2)
 
+    def corners_px(self) -> List[Tuple[float, float]]:
+        """4 corners of the (possibly rotated) rectangle in pixel space: TL, TR, BR, BL."""
+        cx = (self.x1 + self.x2) / 2.0
+        cy = (self.y1 + self.y2) / 2.0
+        hw = abs(self.x2 - self.x1) / 2.0
+        hh = abs(self.y2 - self.y1) / 2.0
+        a  = math.radians(self.rect_angle)
+        ca, sa = math.cos(a), math.sin(a)
+        offsets = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)]
+        return [(cx + dx * ca - dy * sa, cy + dx * sa + dy * ca) for dx, dy in offsets]
+
     def contains_point(self, px: float, py: float) -> bool:
-        return self.left <= px <= self.right and self.top <= py <= self.bottom
+        cx = (self.x1 + self.x2) / 2.0
+        cy = (self.y1 + self.y2) / 2.0
+        dx, dy = px - cx, py - cy
+        a  = math.radians(-self.rect_angle)
+        ca, sa = math.cos(a), math.sin(a)
+        lx = dx * ca - dy * sa
+        ly = dx * sa + dy * ca
+        return (abs(lx) <= abs(self.x2 - self.x1) / 2.0 and
+                abs(ly) <= abs(self.y2 - self.y1) / 2.0)
 
     def to_dict(self, map_info: MapInfo) -> dict:
         wl, wb = map_info.pixel_to_world(self.left,  self.bottom)
@@ -117,17 +137,18 @@ class CoverageZone:
         w_m = abs(self.right - self.left) * map_info.resolution
         h_m = abs(self.bottom - self.top) * map_info.resolution
         return {
-            "key":          self.key,
-            "pixel_bounds": {"x1": self.left, "y1": self.top,
-                             "x2": self.right, "y2": self.bottom},
-            "world_bounds": {"x_min": wl, "y_min": wb,
-                             "x_max": wr, "y_max": wt},
-            "dimensions_m": {"width": round(w_m, 3), "height": round(h_m, 3)},
-            "path_type":    self.path_type,
+            "key":           self.key,
+            "pixel_bounds":  {"x1": self.left, "y1": self.top,
+                              "x2": self.right, "y2": self.bottom},
+            "world_bounds":  {"x_min": wl, "y_min": wb,
+                              "x_max": wr, "y_max": wt},
+            "dimensions_m":  {"width": round(w_m, 3), "height": round(h_m, 3)},
+            "path_type":     self.path_type,
             "robot_width_m": self.robot_width,
-            "angle_deg":    self.angle,
-            "color":        self.color,
-            "waypoints":    self.waypoints,
+            "angle_deg":     self.angle,
+            "rect_angle_deg": self.rect_angle,
+            "color":         self.color,
+            "waypoints":     self.waypoints,
         }
 
 
@@ -189,10 +210,8 @@ class PathGenerator:
             stripe  — stripe index (0-based)
             type    — "coverage" | "transition"
         """
-        # World corners: BL, BR, TR, TL
-        wl, wb = map_info.pixel_to_world(zone.left,  zone.bottom)
-        wr, wt = map_info.pixel_to_world(zone.right, zone.top)
-        corners = [(wl, wb), (wr, wb), (wr, wt), (wl, wt)]
+        # World corners (account for rect_angle rotation): TL, TR, BR, BL
+        corners = [map_info.pixel_to_world(px, py) for px, py in zone.corners_px()]
 
         a = math.radians(zone.angle)
         ca, sa = math.cos(a), math.sin(a)
@@ -317,6 +336,8 @@ class CoveragePlannerApp:
         self._angle_dvar      = tk.DoubleVar(value=0.0)
         self.angle_str_var    = tk.StringVar(value="0.0")
         self._angle_dvar.trace_add("write", self._sync_angle_entry_from_scale)
+        self._rect_angle_var  = tk.DoubleVar(value=0.0)
+        self.rect_angle_str_var = tk.StringVar(value="0.0")
 
         self._build_ui()
         self._bind_events()
@@ -538,8 +559,8 @@ class CoveragePlannerApp:
         angle_frame.grid(row=2, column=1, sticky=tk.EW, padx=(0, 8), pady=3)
         angle_entry = tk.Entry(angle_frame, textvariable=self.angle_str_var,
                                bg="#161b22", fg="white", insertbackground="white",
-                               relief=tk.FLAT, font=("Helvetica", 9), width=7)
-        angle_entry.pack(side=tk.LEFT)
+                               relief=tk.FLAT, font=("Helvetica", 9), width=10)
+        angle_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         angle_entry.bind("<Return>",   self._on_angle_entry_commit)
         angle_entry.bind("<FocusOut>", self._on_angle_entry_commit)
 
@@ -552,18 +573,38 @@ class CoveragePlannerApp:
         self._angle_scale.grid(row=3, column=0, columnspan=2,
                                sticky=tk.EW, padx=8, pady=(0, 4))
 
+        # Rectangle orientation
+        lbl("Rect orient (°):", 4)
+        rect_frame = tk.Frame(zp_sec, bg="#0d1117")
+        rect_frame.grid(row=4, column=1, sticky=tk.EW, padx=(0, 8), pady=3)
+        rect_entry = tk.Entry(rect_frame, textvariable=self.rect_angle_str_var,
+                              bg="#161b22", fg="white", insertbackground="white",
+                              relief=tk.FLAT, font=("Helvetica", 9), width=7)
+        rect_entry.pack(side=tk.LEFT)
+        rect_entry.bind("<Return>",   self._on_rect_angle_commit)
+        rect_entry.bind("<FocusOut>", self._on_rect_angle_commit)
+
+        tk.Button(rect_frame, text="▲",
+                  command=lambda: self._rotate_rect(+15),
+                  bg="#21262d", fg="white", relief=tk.FLAT,
+                  width=2, font=("Helvetica", 9)).pack(side=tk.LEFT, padx=(4, 1))
+        tk.Button(rect_frame, text="▼",
+                  command=lambda: self._rotate_rect(-15),
+                  bg="#21262d", fg="white", relief=tk.FLAT,
+                  width=2, font=("Helvetica", 9)).pack(side=tk.LEFT, padx=(1, 0))
+
         # Path length indicator
         self._path_len_var = tk.StringVar(value="No path generated yet")
         tk.Label(zp_sec, textvariable=self._path_len_var,
                  bg="#0d1117", fg="#3fb950", font=("Helvetica", 7),
-                 anchor=tk.W).grid(row=4, column=0, columnspan=2,
+                 anchor=tk.W).grid(row=5, column=0, columnspan=2,
                                    sticky=tk.W, padx=8, pady=(0, 4))
 
         tk.Button(zp_sec, text="Generate Path for Selected Zone",
                   command=self._generate_selected,
                   bg="#1f6feb", fg="white", relief=tk.FLAT,
                   pady=4, font=("Helvetica", 8)).grid(
-            row=5, column=0, columnspan=2, sticky=tk.EW, padx=8, pady=(0, 8))
+            row=6, column=0, columnspan=2, sticky=tk.EW, padx=8, pady=(0, 8))
 
         # Sequence
         seq_sec = section(right, "Execution Sequence")
@@ -608,6 +649,8 @@ class CoveragePlannerApp:
                        "Left drag       → draw zone or erase\n"
                        "Click zone      → select it\n"
                        "Right-click     → context menu\n"
+                       "↑ / ▲ button   → rotate rectangle +15°\n"
+                       "↓ / ▼ button   → rotate rectangle −15°\n"
                        "Scroll wheel    → zoom on cursor\n"
                        "Middle drag     → pan\n"
                        "Del             → delete selected zone\n"
@@ -640,6 +683,8 @@ class CoveragePlannerApp:
         self.root.bind("<Delete>",          lambda _: self._delete_selected())
         self.root.bind("<e>",               lambda _: self._set_tool_mode("erase"))
         self.root.bind("<d>",               lambda _: self._set_tool_mode("draw"))
+        self.root.bind("<Up>",              lambda _: self._rotate_rect(+15))
+        self.root.bind("<Down>",            lambda _: self._rotate_rect(-15))
 
     # ── Map loading ───────────────────────────────────────────────────────────
 
@@ -1024,6 +1069,8 @@ class CoveragePlannerApp:
             self.robot_width_var.set(f"{z.robot_width:.2f}")
             self._angle_dvar.set(z.angle)
             self.angle_str_var.set(f"{z.angle:.1f}")
+            self._rect_angle_var.set(z.rect_angle)
+            self.rect_angle_str_var.set(f"{z.rect_angle:.1f}")
             # Update listbox
             for i, k in enumerate(self.sequence):
                 if k == key:
@@ -1088,6 +1135,44 @@ class CoveragePlannerApp:
             self.angle_str_var.set(f"{self._angle_dvar.get():.1f}")
         except tk.TclError:
             pass
+
+    def _rotate_angle(self, delta: float):
+        """Increment or decrement the stripe angle of the selected zone by delta degrees."""
+        if not self.selected_key or self.selected_key not in self.zones:
+            return
+        z = self.zones[self.selected_key]
+        a = (z.angle + delta) % 180
+        z.angle = a
+        z.waypoints = []
+        self._angle_dvar.set(a)
+        self.angle_str_var.set(f"{a:.1f}")
+        self._path_len_var.set("No path generated yet")
+        self._redraw()
+
+    def _rotate_rect(self, delta: float):
+        """Rotate the selected zone's rectangle by delta degrees."""
+        if not self.selected_key or self.selected_key not in self.zones:
+            return
+        z = self.zones[self.selected_key]
+        a = (z.rect_angle + delta) % 360
+        z.rect_angle = a
+        z.waypoints = []
+        self._rect_angle_var.set(a)
+        self.rect_angle_str_var.set(f"{a:.1f}")
+        self._path_len_var.set("No path generated yet")
+        self._redraw()
+
+    def _on_rect_angle_commit(self, _event=None):
+        try:
+            a = float(self.rect_angle_str_var.get()) % 360
+        except ValueError:
+            return
+        self._rect_angle_var.set(a)
+        if self.selected_key and self.selected_key in self.zones:
+            self.zones[self.selected_key].rect_angle = a
+            self.zones[self.selected_key].waypoints = []
+            self._path_len_var.set("No path generated yet")
+            self._redraw()
 
     def _delete_selected(self):
         if not self.selected_key:
@@ -1154,7 +1239,7 @@ class CoveragePlannerApp:
             self._zone_lb.insert(
                 tk.END,
                 f" [{check}] {key}  {z.path_type}  "
-                f"∠{z.angle:.0f}°  {n_pts}pts",
+                f"∠{z.angle:.0f}° R{z.rect_angle:.0f}°  {n_pts}pts",
             )
 
     def _refresh_seq_var(self):
@@ -1226,41 +1311,42 @@ class CoveragePlannerApp:
                 self._draw_path(z)
 
     def _draw_zone(self, z: CoverageZone):
-        x1, y1 = self._pixel_to_canvas(z.left,  z.top)
-        x2, y2 = self._pixel_to_canvas(z.right, z.bottom)
-        is_sel  = z.key == self.selected_key
-        lw      = 3 if is_sel else 2
+        # Compute rotated corners in canvas coords
+        corners_c = [self._pixel_to_canvas(px, py) for px, py in z.corners_px()]
+        pts = [coord for pt in corners_c for coord in pt]   # flat list for create_polygon
+        is_sel = z.key == self.selected_key
+        lw     = 3 if is_sel else 2
 
         # Translucent fill (stipple approximation)
-        self.canvas.create_rectangle(
-            x1, y1, x2, y2,
-            fill=z.color, stipple="gray25", outline="")
+        self.canvas.create_polygon(pts, fill=z.color, stipple="gray25", outline="")
         # Border
-        self.canvas.create_rectangle(
-            x1, y1, x2, y2,
-            outline="#FFFFFF" if is_sel else z.color, width=lw)
+        self.canvas.create_polygon(pts, fill="",
+                                    outline="#FFFFFF" if is_sel else z.color, width=lw)
 
-        # Label
+        # Label — place near first corner (top-left when rect_angle ≈ 0)
         if self.show_numbers_var.get():
             fs = max(9, min(22, int(15 * self.zoom)))
-            label_x, label_y = x1 + 6, y1 + 4
-            # Shadow
-            self.canvas.create_text(
-                label_x + 1, label_y + 1, text=z.key.upper(),
-                anchor=tk.NW, font=("Helvetica", fs, "bold"), fill="#000")
-            self.canvas.create_text(
-                label_x, label_y, text=z.key.upper(),
-                anchor=tk.NW, font=("Helvetica", fs, "bold"), fill="#FFF")
+            lx, ly = corners_c[0]   # TL corner
+            self.canvas.create_text(lx + 1, ly + 1, text=z.key.upper(),
+                                     anchor=tk.NW, font=("Helvetica", fs, "bold"), fill="#000")
+            self.canvas.create_text(lx,     ly,     text=z.key.upper(),
+                                     anchor=tk.NW, font=("Helvetica", fs, "bold"), fill="#FFF")
 
-        # Angle direction indicator (small arrow from centre)
+        # Stripe angle indicator — small arrow from centre
+        cx_c = sum(pt[0] for pt in corners_c) / 4
+        cy_c = sum(pt[1] for pt in corners_c) / 4
         if z.angle != 0.0:
-            cx = (x1 + x2) / 2
-            cy = (y1 + y2) / 2
-            r  = max(12, min(24, (x2 - x1) / 4, (y2 - y1) / 4))
-            ar = math.radians(z.angle)
-            ex = cx + r * math.cos(ar)
-            ey = cy - r * math.sin(ar)   # canvas y inverted
-            self.canvas.create_line(cx, cy, ex, ey,
+            dx = corners_c[1][0] - corners_c[0][0]
+            dy = corners_c[1][1] - corners_c[0][1]
+            w_c = math.hypot(dx, dy)
+            h_c = math.hypot(corners_c[3][0] - corners_c[0][0],
+                              corners_c[3][1] - corners_c[0][1])
+            r   = max(12, min(24, w_c / 4, h_c / 4))
+            # stripe angle is in world/map coords; canvas y is inverted
+            ar = math.radians(z.angle + z.rect_angle)
+            ex = cx_c + r * math.cos(ar)
+            ey = cy_c - r * math.sin(ar)
+            self.canvas.create_line(cx_c, cy_c, ex, ey,
                                      fill=z.color, width=2, arrow=tk.LAST)
 
     def _draw_path(self, z: CoverageZone):
@@ -1369,6 +1455,7 @@ class CoveragePlannerApp:
                     path_type=zd.get("path_type", "boustrophedon"),
                     robot_width=zd.get("robot_width_m", DEFAULT_ROBOT_WIDTH),
                     angle=zd.get("angle_deg", 0.0),
+                    rect_angle=zd.get("rect_angle_deg", 0.0),
                     color=zd.get("color", ZONE_COLORS[0]),
                     waypoints=zd.get("waypoints", []),
                 )
