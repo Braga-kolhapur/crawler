@@ -525,12 +525,18 @@ def on_start_mapping():
         "ros2", "launch", "slam_toolbox", "online_async_launch.py",
         f"use_sim_time:={use_sim}",
     ])
+    if not _sim_mode:
+        _start_ros_node("static_tf", [
+            "ros2", "run", "tf2_ros", "static_transform_publisher",
+            "0.11", "0", "0.15", "0", "0", "0", "base_link", "laser",
+        ])
     sio.emit("node_status", _node_status())
 
 
 @sio.on("stop_mapping")
 def on_stop_mapping():
     _stop_ros_node("slam")
+    _stop_ros_node("static_tf")
     sio.emit("node_status", _node_status())
 
 

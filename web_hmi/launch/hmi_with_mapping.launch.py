@@ -12,7 +12,7 @@ Usage:
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
@@ -52,13 +52,22 @@ def generate_launch_description():
         name='hmi_server',
         output='screen',
         arguments=[
-            LaunchConfiguration('plan_file'),
             '--port', LaunchConfiguration('port'),
         ],
         parameters=[{
             'use_sim_time': LaunchConfiguration('use_sim_time')
         }],
         emulate_tty=True,
+    )
+
+    # Static TF: base_link → laser (real robot only, not needed in sim)
+    static_tf_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='base_link_to_laser',
+        output='screen',
+        arguments=['0.11', '0', '0.15', '0', '0', '0', 'base_link', 'laser'],
+        condition=UnlessCondition(LaunchConfiguration('use_sim_time')),
     )
 
     # Optional: SLAM toolbox
@@ -82,5 +91,6 @@ def generate_launch_description():
         start_slam_arg,
         use_sim_time_arg,
         hmi_server_node,
+        static_tf_node,
         slam_toolbox_launch,
     ])
