@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""ROS2 executable wrapper for HMI server."""
+from web_hmi.hmi_server import main
+
+if __name__ == '__main__':
+    main()
