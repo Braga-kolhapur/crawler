@@ -1,5 +1,5 @@
 #!/bin/bash
-sudo docker run -it --rm \
+sudo docker run --rm \
   --name crawler-container \
   --privileged \
   --network host \
@@ -9,4 +9,7 @@ sudo docker run -it --rm \
   -v /dev/ttyUSB_SERIAL:/dev/ttyUSB_SERIAL \
   --group-add dialout \
   -v /home/greatsheep/crawler:/home/ubuntu/ros2_ws/src \
-  crawler:latest
+  crawler:latest \
+  bash -c "source /opt/ros/jazzy/setup.bash && \
+           source /home/ubuntu/ros2_ws/install/setup.bash && \
+           ros2 launch web_hmi hmi_server.launch.py"
