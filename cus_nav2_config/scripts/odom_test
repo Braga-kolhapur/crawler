@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""
+odom_test
+=========
+Subscribes to /test_distance and /test_angle (std_msgs/Int32) and drives
+the robot open-loop using /odom feedback to stop at the target.
+
+  /test_distance  Int32  — linear velocity (m/s). Robot travels 1 m in +x then stops.
+  /test_angle     Int32  — angular velocity (deg/s, sign sets CW/CCW).
+                           Robot turns 90° then stops.
+  /odom           nav_msgs/Odometry  — position feedback
+  /cmd_vel        geometry_msgs/Twist (non-stamped) — velocity output
+"""
+
+import math
+import rclpy
+from rclpy.node import Node
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Twist
+from std_msgs.msg import Int32
+
+TARGET_DISTANCE_M   = 1.0   # metres
+TARGET_ANGLE_DEG    = 90.0  # degrees
+
+
+def _quat_to_yaw(x, y, z, w) -> float:
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def _angle_diff(a: float, b: float) -> float:
+    """Shortest signed difference (a - b) wrapped to [-π, π]."""
+    d = a - b
+    while d >  math.pi: d -= 2.0 * math.pi
+    while d < -math.pi: d += 2.0 * math.pi
+    return d
+
+
+class OdomTest(Node):
+    def __init__(self):
+        super().__init__('odom_test')
+
+        self._cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+
+        self.create_subscription(Int32,   '/test_distance', self._cb_distance, 10)
+        self.create_subscription(Int32,   '/test_angle',    self._cb_angle,    10)
+        self.create_subscription(Odometry, '/odom',         self._cb_odom,     10)
+
+        # State machine: 'idle' | 'distance' | 'angle'
+        self._state        = 'idle'
+        self._start_x      = 0.0
+        self._start_y      = 0.0
+        self._start_yaw    = 0.0
+        self._lin_vel      = 0.0   # m/s
+        self._ang_vel      = 0.0   # rad/s
+
+        # Latest odom values
+        self._cur_x        = 0.0
+        self._cur_y        = 0.0
+        self._cur_yaw      = 0.0
+        self._odom_ready   = False
+
+        self.get_logger().info(
+            'odom_test ready.\n'
+            '  /test_distance <Int32 m/s>  → drive 1 m forward\n'
+            '  /test_angle    <Int32 deg/s> → turn 90°'
+        )
+
+    # ── Odom callback (runs every odom tick) ──────────────────────────────────
+
+    def _cb_odom(self, msg: Odometry):
+        pos = msg.pose.pose.position
+        q   = msg.pose.pose.orientation
+        self._cur_x   = pos.x
+        self._cur_y   = pos.y
+        self._cur_yaw = _quat_to_yaw(q.x, q.y, q.z, q.w)
+        self._odom_ready = True
+
+        if self._state == 'distance':
+            dist = math.sqrt(
+                (self._cur_x - self._start_x) ** 2 +
+                (self._cur_y - self._start_y) ** 2
+            )
+            if dist >= TARGET_DISTANCE_M:
+                self._stop()
+                self.get_logger().info(
+                    f'Distance test done — travelled {dist:.3f} m (target {TARGET_DISTANCE_M} m)'
+                )
+            else:
+                tw = Twist()
+                tw.linear.x = self._lin_vel
+                self._cmd_pub.publish(tw)
+
+        elif self._state == 'angle':
+            turned_rad = abs(_angle_diff(self._cur_yaw, self._start_yaw))
+            target_rad = math.radians(TARGET_ANGLE_DEG)
+            if turned_rad >= target_rad:
+                self._stop()
+                self.get_logger().info(
+                    f'Angle test done — turned {math.degrees(turned_rad):.1f}° '
+                    f'(target {TARGET_ANGLE_DEG}°)'
+                )
+            else:
+                tw = Twist()
+                tw.angular.z = self._ang_vel
+                self._cmd_pub.publish(tw)
+
+    # ── Command callbacks ─────────────────────────────────────────────────────
+
+    def _cb_distance(self, msg: Int32):
+        if not self._odom_ready:
+            self.get_logger().warn('/test_distance ignored — no /odom received yet')
+            return
+        if self._state != 'idle':
+            self.get_logger().warn(
+                f'/test_distance ignored — test "{self._state}" already running'
+            )
+            return
+
+        self._lin_vel = float(msg.data)   # m/s
+        self._start_x = self._cur_x
+        self._start_y = self._cur_y
+        self._state   = 'distance'
+        self.get_logger().info(
+            f'Distance test started — target: {TARGET_DISTANCE_M} m, '
+            f'velocity: {self._lin_vel} m/s, '
+            f'start: ({self._start_x:.3f}, {self._start_y:.3f})'
+        )
+
+    def _cb_angle(self, msg: Int32):
+        if not self._odom_ready:
+            self.get_logger().warn('/test_angle ignored — no /odom received yet')
+            return
+        if self._state != 'idle':
+            self.get_logger().warn(
+                f'/test_angle ignored — test "{self._state}" already running'
+            )
+            return
+
+        self._ang_vel   = math.radians(float(msg.data))   # deg/s → rad/s
+        self._start_yaw = self._cur_yaw
+        self._state     = 'angle'
+        self.get_logger().info(
+            f'Angle test started — target: {TARGET_ANGLE_DEG}°, '
+            f'angular velocity: {msg.data} deg/s ({self._ang_vel:.4f} rad/s), '
+            f'start yaw: {math.degrees(self._start_yaw):.1f}°'
+        )
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _stop(self):
+        """Publish zero velocity and return to idle."""
+        self._state = 'idle'
+        self._cmd_pub.publish(Twist())
+
+
+def main():
+    rclpy.init()
+    node = OdomTest()
+    try:
+        rclpy.spin(node)
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()
+
+
+if __name__ == '__main__':
+    main()

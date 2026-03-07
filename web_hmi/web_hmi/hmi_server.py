@@ -521,10 +521,23 @@ def on_cmd_vel(data):
 def on_start_mapping():
     """Launch slam_toolbox for SLAM mapping (respects sim mode)."""
     use_sim = "true" if _sim_mode else "false"
-    _start_ros_node("slam", [
+
+    slam_cmd = [
         "ros2", "launch", "slam_toolbox", "online_async_launch.py",
         f"use_sim_time:={use_sim}",
-    ])
+    ]
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        params_file = os.path.join(
+            get_package_share_directory('cus_nav2_config'),
+            'params', 'mapper_params_online_async.yaml'
+        )
+        if os.path.exists(params_file):
+            slam_cmd.append(f"slam_params_file:={params_file}")
+    except Exception:
+        pass
+
+    _start_ros_node("slam", slam_cmd)
     '''if not _sim_mode:
         _start_ros_node("static_tf", [
             "ros2", "run", "tf2_ros", "static_transform_publisher",

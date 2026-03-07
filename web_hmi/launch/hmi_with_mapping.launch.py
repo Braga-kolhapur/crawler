@@ -80,7 +80,12 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
-            'use_sim_time': LaunchConfiguration('use_sim_time')
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'slam_params_file': PathJoinSubstitution([
+                FindPackageShare('cus_nav2_config'),
+                'params',
+                'mapper_params_online_async.yaml'
+            ]),
         }.items(),
         condition=IfCondition(LaunchConfiguration('start_slam'))
     )
