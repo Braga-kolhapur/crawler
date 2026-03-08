@@ -1,0 +1,5 @@
+flask>=2.3
+flask-socketio>=5.3
+Pillow>=9.0
+pyyaml>=6.0
+# eventlet>=0.33  # optional: faster async; uncomment if you want it

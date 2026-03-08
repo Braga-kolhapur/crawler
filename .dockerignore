@@ -1,0 +1,66 @@
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# ROS build artifacts (don't copy local builds to Docker)
+build/
+install/
+log/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation that doesn't need to be in container
+*.md
+!README.md
+docs/
+
+# Test files
+test/
+tests/
+*.test
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+.cache/
+
+# Docker files (don't copy Dockerfiles into the image)
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Coverage reports
+.coverage
+htmlcov/
+*.cover
+
+# Virtual environments
+venv/
+env/
+ENV/

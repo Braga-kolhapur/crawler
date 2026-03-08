@@ -4,36 +4,116 @@ FROM working:2
 # Use bash for all RUN commands
 SHELL ["/bin/bash", "-c"]
 
+# Clean up the old workspace from base image
+RUN rm -rf /home/ubuntu/ros2_ws && \
+    mkdir -p /home/ubuntu/ros2_ws/src
+
+# Install system dependencies early (rarely changes, can be cached)
+# Added web_hmi Python dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3-pip \
+    python3-flask \
+    python3-pil \
+    python3-yaml \
+    vim && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Nav2 and SLAM Toolbox from apt (binary packages, cached layer)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ros-jazzy-navigation2 \
+    ros-jazzy-nav2-bringup \
+    ros-jazzy-slam-toolbox \
+    ros-jazzy-nav2-map-server \
+    ros-jazzy-nav2-amcl \
+    ros-jazzy-nav2-lifecycle-manager \
+    ros-jazzy-nav2-bt-navigator \
+    ros-jazzy-nav2-planner \
+    ros-jazzy-nav2-controller \
+    ros-jazzy-nav2-smoother \
+    ros-jazzy-nav2-waypoint-follower \
+    ros-jazzy-nav2-velocity-smoother \
+    ros-jazzy-nav2-collision-monitor \
+    ros-jazzy-nav2-rviz-plugins && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install web_hmi Python packages via pip (for latest versions)
+# Use --break-system-packages since we're in a container
+RUN pip3 install --break-system-packages \
+    flask>=2.3 \
+    flask-socketio>=5.3 \
+    Pillow>=9.0 \
+    pyyaml>=6.0 \
+    simple-websocket>=1.0
+
+# Update rosdep early (independent of source code)
+RUN rosdep update --rosdistro $ROS_DISTRO
+
 # Set working directory
 WORKDIR /home/ubuntu/ros2_ws
 
-# Create src directory
-RUN mkdir -p /home/ubuntu/ros2_ws/src
+# ========================================================================
+# OPTIMIZATION: Copy and build STABLE packages first (rarely change)
+# This creates a cached layer that won't rebuild unless these packages change
+# ========================================================================
 
-# Copy the crawler repository contents into src directory
-# This assumes the build context is the crawler repo root
-COPY . /home/ubuntu/ros2_ws/src/crawler/
+# Copy only stable packages first
+COPY all_create_robot/ /home/ubuntu/ros2_ws/src/all_create_robot/
+COPY libcreate/ /home/ubuntu/ros2_ws/src/libcreate/
+COPY rplidar_ros/ /home/ubuntu/ros2_ws/src/rplidar_ros/
 
-# Install any additional dependencies needed for the workspace
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Update rosdep to ensure dependencies are available
-RUN rosdep update --rosdistro $ROS_DISTRO
-
-# Install package dependencies
+# Install dependencies for stable packages only
 RUN source /opt/ros/jazzy/setup.bash && \
-    rosdep install --from-paths src --ignore-src -r -y
+    rosdep install --from-paths src --ignore-src -r -y \
+    --skip-keys ament_python \
+    --skip-keys py_trees \
+    --skip-keys joy \
+    --skip-keys joy_teleop \
+    --skip-keys pyyaml || echo "Some rosdep dependencies could not be installed, continuing..."
 
-# Build the workspace with colcon
+# Build stable packages (THIS LAYER WILL BE CACHED!)
 RUN source /opt/ros/jazzy/setup.bash && \
-    colcon build --symlink-install && \
-    source install/setup.bash
+    colcon build --symlink-install \
+    --packages-select \
+        create_msgs \
+        create_description \
+        libcreate \
+        create_driver \
+        create_bringup \
+        create_robot \
+        rplidar_ros && \
+    echo "Stable packages built and cached"
 
-# Default environment setup
+# ========================================================================
+# Copy and build FREQUENTLY CHANGING packages (web_hmi, behavior_tree, etc.)
+# Only this layer rebuilds when you change these packages
+# ========================================================================
+
+# Copy frequently changing packages
+COPY web_hmi/ /home/ubuntu/ros2_ws/src/web_hmi/
+COPY create_behavior_tree/ /home/ubuntu/ros2_ws/src/create_behavior_tree/
+COPY simple_teleop/ /home/ubuntu/ros2_ws/src/simple_teleop/
+COPY scripts/ /home/ubuntu/ros2_ws/src/scripts/
+COPY cus_nav2_config/ /home/ubuntu/ros2_ws/src/cus_nav2_config/
+
+# Build the remaining packages (only these rebuild on changes)
+RUN source /opt/ros/jazzy/setup.bash && \
+    source install/setup.bash && \
+    colcon build --symlink-install \
+    --packages-select \
+        web_hmi \
+        create_behavior_tree \
+        simple_teleop \
+        cus_nav2_config && \
+    echo "Development packages built"
+
+# Setup environment (last, so it's always applied)
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc && \
     echo "if [ -f install/setup.bash ]; then source install/setup.bash; fi" >> /root/.bashrc
+
+# Expose web_hmi port
+EXPOSE 5002
 
 # Default command
 CMD ["bash"]

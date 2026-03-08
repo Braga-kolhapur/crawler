@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>web_hmi</name>
+  <version>1.0.0</version>
+  <description>Mobile-first web interface for monitoring and controlling the coverage robot</description>
+  <maintainer email="pratik@todo.todo">Pratik</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- Python dependencies -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+
+  <!-- ROS2 packages this HMI works with (optional, installed separately if needed) -->
+  <!-- These are optional - HMI will launch them if available, but doesn't require them to run -->
+  <!-- <exec_depend>slam_toolbox</exec_depend> -->
+  <!-- <exec_depend>nav2_bringup</exec_depend> -->
+  <!-- <exec_depend>nav2_map_server</exec_depend> -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

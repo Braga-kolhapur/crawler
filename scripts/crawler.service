@@ -1,0 +1,16 @@
+[Unit]
+Description=Crawler ROS2 Docker Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=greatsheep
+ExecStartPre=-/usr/bin/docker stop crawler-container
+ExecStartPre=-/usr/bin/docker rm crawler-container
+ExecStart=/home/greatsheep/scripts/docker_run.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

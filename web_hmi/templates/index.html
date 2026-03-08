@@ -1,0 +1,2422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d1117">
+<title>Coverage HMI</title>
+<style>
+/* ── Reset & tokens ────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0d1117; --surf:#161b22; --surf2:#21262d; --border:#30363d;
+  --text:#c9d1d9; --dim:#6e7681; --accent:#1f6feb;
+  --green:#22c55e; --orange:#f97316; --red:#ef4444; --blue:#60a5fa;
+  --hdr:52px; --tabs:40px; --top:92px; --bot:245px; --man-bot:108px;
+}
+html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
+  color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  touch-action:none}
+
+/* ── Header ────────────────────────────────────────────────────── */
+#hdr{position:fixed;top:0;left:0;right:0;height:var(--hdr);
+  background:var(--surf);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:10px;z-index:200}
+#hdr h1{font-size:15px;font-weight:700;flex:1}
+.ros-dot{width:9px;height:9px;border-radius:50%;background:var(--dim);flex-shrink:0;
+  transition:background .3s,box-shadow .3s}
+.ros-dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.ros-dot.off{background:var(--red)}
+#ros-lbl{font-size:11px;color:var(--dim)}
+
+/* Sim checkbox pill */
+.sim-label{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim);
+  cursor:pointer;padding:5px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--surf2);transition:border-color .15s,color .15s;
+  white-space:nowrap;user-select:none}
+.sim-label input{margin:0;cursor:pointer;accent-color:var(--accent)}
+.sim-label.active{border-color:var(--accent);color:var(--blue)}
+
+/* ── Tab bar ────────────────────────────────────────────────────── */
+#tab-bar{position:fixed;top:var(--hdr);left:0;right:0;height:var(--tabs);
+  background:var(--surf);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 8px;gap:4px;z-index:200}
+.tab-btn{padding:5px 20px;border:none;border-radius:6px;background:none;
+  color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.tab-btn.active{background:var(--surf2);color:var(--text)}
+.tab-btn:not(.active):hover{background:rgba(255,255,255,0.06);color:var(--text)}
+
+/* ── Map area (AUTO tab) ────────────────────────────────────────── */
+#map-wrap{position:fixed;top:var(--top);left:0;right:0;bottom:var(--bot);
+  background:#000;overflow:hidden;touch-action:none}
+#map-canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#map-canvas:active{cursor:grabbing}
+#loading{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;background:#000;
+  color:var(--dim);font-size:13px;gap:10px;z-index:10}
+.spinner{width:28px;height:28px;border:3px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Floating status card */
+#map-status{position:absolute;top:10px;right:10px;background:rgba(22,27,34,.93);
+  border:1px solid var(--border);border-radius:10px;padding:9px 13px;
+  min-width:145px;pointer-events:none;backdrop-filter:blur(6px)}
+.ms-row{display:flex;align-items:baseline;gap:6px}
+.ms-label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
+.ms-zone{font-size:26px;font-weight:800;line-height:1;margin:2px 0}
+.ms-pbar{height:5px;background:var(--surf2);border-radius:3px;margin-top:5px;overflow:hidden}
+.ms-pfill{height:100%;background:var(--green);border-radius:3px;transition:width .5s}
+.ms-pct{font-size:11px;color:var(--green);text-align:right;margin-top:2px}
+
+/* Legend */
+#legend{position:absolute;bottom:8px;left:8px;background:rgba(22,27,34,.85);
+  border:1px solid var(--border);border-radius:8px;padding:6px 10px;
+  pointer-events:none;display:flex;flex-direction:column;gap:3px}
+.leg-row{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--dim)}
+.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+/* ── Bottom panel (AUTO tab) ────────────────────────────────────── */
+#bot-panel{position:fixed;left:0;right:0;bottom:0;height:var(--bot);
+  background:var(--surf);border-top:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:200;transition:height .25s ease}
+#bot-panel.expanded{height:58vh}
+
+#bot-handle{display:flex;align-items:center;justify-content:center;
+  padding:8px 0 4px;cursor:pointer;flex-shrink:0}
+.handle-bar{width:38px;height:4px;background:var(--border);border-radius:2px}
+
+#bot-body{display:flex;flex-direction:column;flex:1;overflow:hidden;padding:0 12px 10px}
+
+/* Sequence list */
+.sec-title{font-size:10px;color:var(--dim);text-transform:uppercase;
+  letter-spacing:.7px;margin-bottom:6px;flex-shrink:0}
+
+#seq-list{flex:1;overflow-y:auto;overflow-x:hidden;
+  display:flex;flex-direction:column;gap:5px;padding-right:2px}
+#seq-list::-webkit-scrollbar{width:3px}
+#seq-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* Sequence cards */
+.seq-card{display:flex;align-items:center;gap:8px;background:var(--surf2);
+  border:1.5px solid var(--border);border-radius:9px;padding:7px 10px;
+  min-height:48px;cursor:default;user-select:none;flex-shrink:0;
+  transition:border-color .15s,opacity .15s}
+.seq-card.active{border-color:var(--accent)}
+.seq-card.done{border-color:var(--green);opacity:.65}
+.seq-card.ghost{opacity:.35;border-style:dashed}
+.seq-placeholder{border:2px dashed var(--accent);border-radius:9px;background:rgba(31,111,235,.05)}
+
+.drag-h{color:var(--dim);font-size:17px;padding:4px 2px;cursor:grab;flex-shrink:0}
+.drag-h:active{cursor:grabbing}
+
+.zone-badge{width:34px;height:34px;border-radius:7px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:15px;color:#fff}
+
+.card-info{flex:1;min-width:0}
+.card-top{display:flex;align-items:center;gap:6px}
+.card-name{font-size:13px;font-weight:600}
+.card-pct{font-size:11px;color:var(--dim)}
+.card-bar{height:3px;background:var(--surf);border-radius:2px;margin-top:3px;overflow:hidden}
+.card-fill{height:100%;background:var(--green);border-radius:2px;transition:width .4s}
+
+.card-status{font-size:16px;flex-shrink:0}
+.btn-del{background:none;border:none;color:var(--dim);font-size:17px;
+  cursor:pointer;padding:4px;flex-shrink:0;line-height:1}
+.btn-del:hover{color:var(--red)}
+
+.seq-empty{display:flex;align-items:center;justify-content:center;
+  height:60px;color:var(--dim);font-size:12px}
+
+/* Control buttons */
+#controls{display:flex;gap:6px;padding-top:8px;flex-shrink:0}
+.cbtn{flex:1;padding:12px 0;border:none;border-radius:8px;
+  font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s,transform .1s;
+  -webkit-font-smoothing:antialiased}
+.cbtn:active{opacity:.75;transform:scale(.97)}
+.cbtn:disabled{opacity:.38;cursor:not-allowed;transform:none}
+.cbtn-start{background:var(--green);color:#000}
+.cbtn-pause{background:var(--surf2);color:var(--text);border:1px solid var(--border)}
+.cbtn-stop{background:var(--red);color:#fff}
+.cbtn-fit{flex:0 0 auto;padding:12px 14px;
+  background:var(--surf2);color:var(--dim);border:1px solid var(--border)}
+
+/* Node status row in auto tab */
+#auto-nd-row{display:flex;gap:14px;padding-top:6px;flex-shrink:0}
+.auto-nd-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--dim)}
+
+/* ── MANUAL TAB — split view (left=map, right=joystick) ─────────── */
+#joy-wrap{position:fixed;top:var(--top);left:0;right:0;bottom:var(--man-bot);
+  overflow:hidden;display:none;flex-direction:row}
+
+/* Left half — live SLAM map */
+#map-half{flex:1;background:#000;overflow:hidden;position:relative;
+  border-right:1px solid var(--border)}
+#map-full-canvas{display:block;width:100%;height:100%;image-rendering:pixelated}
+.map-half-lbl{position:absolute;bottom:0;left:0;right:0;
+  background:rgba(0,0,0,.6);text-align:center;font-size:9px;
+  color:var(--dim);padding:2px 0;pointer-events:none}
+#map-half-empty{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;color:var(--dim);font-size:11px;pointer-events:none}
+
+/* Right half — joystick */
+#joy-half{flex:1;background:#111;overflow:hidden;position:relative}
+#joy-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+
+/* Speed overlay */
+#speed-overlay{position:absolute;top:10px;left:10px;
+  background:rgba(22,27,34,.88);border:1px solid var(--border);border-radius:8px;
+  padding:7px 12px;pointer-events:none;line-height:1.6}
+.sp-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
+.sp-lbl{min-width:14px}
+.sp-val{font-family:monospace;font-size:14px;font-weight:700;color:var(--text);
+  min-width:52px;text-align:right}
+.sp-unit{font-size:10px}
+
+/* ── Manual bottom panel ────────────────────────────────────────── */
+#manual-panel{position:fixed;left:0;right:0;bottom:0;height:var(--man-bot);
+  background:var(--surf);border-top:1px solid var(--border);
+  display:none;flex-direction:column;z-index:200;padding:8px 14px;gap:6px}
+
+/* Node status dots */
+.nd{display:inline-block;width:8px;height:8px;border-radius:50%;
+  background:var(--dim);vertical-align:middle;transition:background .3s,box-shadow .3s}
+.nd.on{background:var(--green);box-shadow:0 0 5px var(--green)}
+.nd.off{background:var(--red)}
+.nd-row{display:flex;gap:14px;align-items:center;font-size:11px;color:var(--dim)}
+.nd-item{display:flex;align-items:center;gap:4px}
+
+/* Manual action buttons */
+.man-btns{display:flex;gap:6px}
+.man-btn{flex:1;padding:10px 6px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surf2);color:var(--text);font-size:12px;font-weight:600;
+  cursor:pointer;transition:all .15s;-webkit-font-smoothing:antialiased}
+.man-btn:active{opacity:.7;transform:scale(.97)}
+.man-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+/* State-specific button colours */
+.man-btn-go{border-color:var(--green);color:var(--green)}
+.man-btn-stop{border-color:var(--red);color:var(--red)}
+.man-btn-active{border-color:var(--accent);color:var(--blue);background:rgba(31,111,235,.12)}
+
+/* Save map row */
+.save-row{display:flex;gap:6px;align-items:center}
+.save-row input{flex:1;padding:7px 10px;background:var(--surf2);
+  border:1px solid var(--border);color:var(--text);border-radius:8px;
+  font-size:12px;outline:none;min-width:0}
+.save-row input:focus{border-color:var(--accent)}
+.save-row .man-btn{flex:0 0 auto;padding:7px 12px;font-size:11px}
+
+/* ── Toast ──────────────────────────────────────────────────────── */
+#toast{position:fixed;bottom:calc(var(--bot) + 10px);left:50%;
+  transform:translateX(-50%);background:var(--surf2);color:var(--text);
+  border:1px solid var(--border);padding:8px 18px;border-radius:20px;
+  font-size:12px;z-index:300;opacity:0;transition:opacity .2s;
+  pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1}
+#toast.manual-mode{bottom:calc(var(--man-bot) + 10px)}
+@keyframes obs-pulse{0%,100%{opacity:1}50%{opacity:.75}}
+
+/* ── Initial Pose Modal ─────────────────────────────────────────── */
+#pose-modal{display:none;position:fixed;inset:0;z-index:600;
+  background:#000;flex-direction:column}
+#pose-modal.open{display:flex}
+#pose-modal-hdr{display:flex;align-items:center;gap:10px;padding:10px 14px;
+  background:var(--surf);border-bottom:1px solid var(--border);flex-shrink:0}
+#pose-modal-hdr h2{font-size:14px;font-weight:700;color:var(--text)}
+#pose-modal-hint{flex:1;font-size:11px;color:var(--dim)}
+#pose-modal-cancel{padding:6px 14px;border:1px solid var(--border);border-radius:7px;
+  background:var(--surf2);color:var(--dim);font-size:12px;cursor:pointer}
+#pose-modal-cancel:hover{color:var(--text)}
+#pose-canvas{display:block;flex:1;width:100%;touch-action:none;cursor:crosshair}
+
+/* ── Coverage Planner Modal ─────────────────────────────────────── */
+#planner-modal{display:none;position:fixed;inset:0;z-index:700;
+  background:var(--bg);flex-direction:column}
+#planner-modal.open{display:flex}
+#planner-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:var(--surf);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+#planner-hdr h2{font-size:13px;font-weight:700;white-space:nowrap;margin-right:4px}
+#planner-map-dd{padding:5px 8px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surf2);color:var(--text);font-size:11px;cursor:pointer;outline:none}
+#planner-map-dd:focus{border-color:var(--accent)}
+.pl-btn{padding:5px 10px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surf2);color:var(--text);font-size:11px;cursor:pointer;white-space:nowrap}
+.pl-btn:active{opacity:.7}
+.pl-btn-green{border-color:var(--green);color:var(--green)}
+.pl-btn-blue{border-color:var(--accent);color:var(--blue);background:rgba(31,111,235,.12)}
+.pl-btn-red{border-color:var(--red);color:var(--red)}
+.pl-btn-close{margin-left:auto;padding:5px 12px}
+#planner-map-info{font-size:10px;color:var(--dim);white-space:nowrap}
+#planner-body{display:flex;flex:1;overflow:hidden;min-height:0}
+#planner-canvas-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#000;position:relative}
+#planner-toolbar{display:flex;align-items:center;gap:6px;padding:5px 10px;
+  background:var(--surf2);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.pl-tool-btn{padding:4px 10px;border-radius:5px;border:1px solid var(--border);
+  background:var(--surf);color:var(--dim);font-size:11px;cursor:pointer}
+.pl-tool-btn.active{border-color:var(--accent);color:var(--blue);background:rgba(31,111,235,.15)}
+#planner-canvas{display:block;flex:1;width:100%;height:100%;touch-action:none;cursor:crosshair}
+#planner-status{position:absolute;bottom:6px;left:8px;right:8px;
+  background:rgba(22,27,34,.88);border:1px solid var(--border);border-radius:6px;
+  padding:4px 10px;font-size:10px;color:var(--dim);pointer-events:none}
+#planner-sidebar{width:260px;flex-shrink:0;display:flex;flex-direction:column;
+  overflow-y:auto;background:var(--surf);border-left:1px solid var(--border);
+  padding:8px}
+#planner-sidebar::-webkit-scrollbar{width:3px}
+#planner-sidebar::-webkit-scrollbar-thumb{background:var(--border)}
+.pl-sec{margin-bottom:10px}
+.pl-sec-title{font-size:10px;color:var(--dim);text-transform:uppercase;
+  letter-spacing:.7px;margin-bottom:5px}
+#planner-zone-list{display:flex;flex-direction:column;gap:4px;max-height:160px;
+  overflow-y:auto}
+#planner-zone-list::-webkit-scrollbar{width:3px}
+#planner-zone-list::-webkit-scrollbar-thumb{background:var(--border)}
+.pz-card{display:flex;align-items:center;gap:6px;padding:5px 8px;
+  border-radius:7px;border:1.5px solid var(--border);background:var(--surf2);cursor:pointer}
+.pz-card.selected{border-color:var(--accent)}
+.pz-swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.pz-name{font-size:12px;font-weight:600;flex:1}
+.pz-pts{font-size:10px;color:var(--dim)}
+.pz-del{background:none;border:none;color:var(--dim);font-size:14px;cursor:pointer;padding:0 2px;line-height:1}
+.pz-del:hover{color:var(--red)}
+.pl-prop-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.pl-prop-lbl{font-size:10px;color:var(--dim);width:70px;flex-shrink:0}
+.pl-prop-inp{flex:1;padding:4px 8px;background:var(--surf2);border:1px solid var(--border);
+  color:var(--text);border-radius:5px;font-size:11px;outline:none}
+.pl-prop-inp:focus{border-color:var(--accent)}
+#prop-angle-slider{flex:1;accent-color:var(--accent)}
+.pl-rot-btns{display:flex;gap:3px}
+.pl-rot-btn{padding:3px 7px;border-radius:5px;border:1px solid var(--border);
+  background:var(--surf2);color:var(--text);font-size:12px;cursor:pointer}
+@media(max-width:600px){
+  #planner-sidebar{width:100%;height:200px;border-left:none;border-top:1px solid var(--border)}
+  #planner-body{flex-direction:column}
+}
+/* ── Map selector row ───────────────────────────────────────────── */
+#map-sel-row{display:flex;align-items:center;gap:8px;padding:6px 0 2px;flex-shrink:0}
+#map-sel-row .ms-lbl{font-size:10px;color:var(--dim);flex-shrink:0;text-transform:uppercase;letter-spacing:.7px}
+#map-sel-dd{flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surf2);color:var(--text);font-size:12px;cursor:pointer;outline:none;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236e7681'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center}
+#map-sel-dd:focus{border-color:var(--accent)}
+#map-sel-dd option{background:var(--surf2);color:var(--text)}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────────────────── -->
+<header id="hdr">
+  <h1>Coverage HMI</h1>
+  <label class="sim-label" id="sim-label"
+         title="Sim mode: TwistStamped cmd_vel · use_sim_time · turtlebot3_gazebo">
+    <input type="checkbox" id="sim-check" onchange="onSimToggle(this.checked)">
+    Sim
+  </label>
+  <span id="ros-lbl">ROS</span>
+  <div class="ros-dot" id="ros-dot"></div>
+</header>
+
+<!-- ── OBSTACLE WARNING BANNER (fixed, hidden until detected) ──── -->
+<div id="obstacle-banner"
+     style="display:none;position:fixed;top:var(--hdr);left:0;right:0;z-index:190;
+            background:var(--red);color:#fff;text-align:center;padding:7px 14px;
+            font-size:13px;font-weight:700;letter-spacing:.4px;
+            box-shadow:0 2px 8px rgba(239,68,68,.5);animation:obs-pulse 1s ease-in-out infinite">
+  ⚠ OBSTACLE DETECTED — Robot Paused
+</div>
+
+<!-- ── TAB BAR ───────────────────────────────────────────────────── -->
+<div id="tab-bar">
+  <button class="tab-btn"        data-tab="auto">⚙ Auto</button>
+  <button class="tab-btn active" data-tab="manual">🕹 Manual</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     AUTO TAB
+     ══════════════════════════════════════════════════════════════ -->
+
+<!-- Map canvas -->
+<div id="map-wrap" class="auto-view" style="display:none">
+  <canvas id="map-canvas"></canvas>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Loading map…</span>
+  </div>
+
+  <!-- Floating status card -->
+  <div id="map-status">
+    <div class="ms-label">Current zone</div>
+    <div class="ms-zone" id="ms-zone">—</div>
+    <div class="ms-pbar"><div class="ms-pfill" id="ms-bar" style="width:0%"></div></div>
+    <div class="ms-pct" id="ms-pct">0.0 %</div>
+  </div>
+
+  <!-- Legend -->
+  <div id="legend">
+    <div class="leg-row"><div class="leg-dot" style="background:var(--green)"></div>Covered</div>
+    <div class="leg-row"><div class="leg-dot" style="background:var(--orange)"></div>Remaining</div>
+    <div class="leg-row"><div class="leg-dot" style="background:var(--red)"></div>Robot</div>
+  </div>
+</div>
+
+<!-- Bottom panel -->
+<div id="bot-panel" class="auto-view" style="display:none">
+  <div id="bot-handle" title="Tap to expand / collapse">
+    <div class="handle-bar"></div>
+  </div>
+
+  <div id="bot-body">
+    <div class="sec-title">Execution Sequence — drag to reorder</div>
+    <div id="seq-list"></div>
+
+    <!-- Map selector -->
+    <div id="map-sel-row">
+      <span class="ms-lbl">Map</span>
+      <select id="map-sel-dd" onchange="selectMap(this.value)">
+        <option value="">Loading…</option>
+      </select>
+    </div>
+
+    <div id="controls">
+      <button class="cbtn cbtn-start" id="btn-start"    onclick="cmdStartAutonomy()">▶ Start Robot</button>
+      <button class="cbtn cbtn-start" id="btn-coverage" onclick="cmdStartCoverage()" disabled
+              style="background:var(--blue)">▶ Start Coverage</button>
+      <button class="cbtn cbtn-pause" id="btn-pause"    onclick="cmdPause()" disabled>⏸ Pause</button>
+      <button class="cbtn cbtn-stop"  id="btn-stop"     onclick="cmdStopAutonomy()" disabled>⏹ Stop</button>
+      <button class="cbtn cbtn-fit"   onclick="fitMap()" title="Fit map">⤢</button>
+    </div>
+
+    <div style="display:flex;padding-top:6px">
+      <button class="cbtn" id="btn-init-pose" onclick="openPoseModal()"
+              style="background:var(--surf2);color:var(--blue);
+                     border:1px solid var(--accent);font-size:12px;padding:8px 0">
+        📍 Set Initial Pose
+      </button>
+    </div>
+
+    <!-- Node status row -->
+    <div id="auto-nd-row">
+      <span class="auto-nd-item"><span class="nd" id="nd-amcl-auto"></span>AMCL</span>
+      <span class="auto-nd-item"><span class="nd" id="nd-nav2-auto"></span>Nav2</span>
+      <span class="auto-nd-item"><span class="nd" id="nd-slam-auto"></span>SLAM</span>
+      <span class="auto-nd-item"><span class="nd" id="nd-obstacle-auto"></span>Obstacle Det.</span>
+    </div>
+    <div style="padding-top:6px">
+      <button class="cbtn" id="btn-obstacle" onclick="cmdToggleObstacle()"
+              style="font-size:12px;padding:7px 14px;border-color:var(--orange);color:var(--orange)">
+        🛡 Obstacle Detector
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MANUAL TAB
+     ══════════════════════════════════════════════════════════════ -->
+
+<!-- Split view: left=live map, right=joystick (visible only when teleop ON) -->
+<div id="joy-wrap" class="manual-view" style="display:none">
+
+  <!-- Left half: live SLAM map -->
+  <div id="map-half">
+    <canvas id="map-full-canvas"></canvas>
+    <div class="map-half-lbl">Live Map (/map)</div>
+    <div id="map-half-empty">No /map data yet</div>
+  </div>
+
+  <!-- Right half: joystick + speed overlay -->
+  <div id="joy-half">
+    <canvas id="joy-canvas"></canvas>
+    <div id="speed-overlay">
+      <div class="sp-row">
+        <span class="sp-lbl">V</span>
+        <span class="sp-val" id="joy-linear">0.00</span>
+        <span class="sp-unit">m/s</span>
+      </div>
+      <div class="sp-row">
+        <span class="sp-lbl">ω</span>
+        <span class="sp-val" id="joy-angular">0.00</span>
+        <span class="sp-unit">rad/s</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Manual controls panel -->
+<div id="manual-panel" class="manual-view" style="display:flex">
+
+  <!-- Node status dots -->
+  <div class="nd-row">
+    <span class="nd-item"><span class="nd" id="nd-robot"></span>Robot</span>
+    <span class="nd-item"><span class="nd" id="nd-slam"></span>SLAM</span>
+    <span class="nd-item"><span class="nd" id="nd-amcl-m"></span>AMCL</span>
+    <span class="nd-item"><span class="nd" id="nd-nav2-m"></span>Nav2</span>
+  </div>
+
+  <!-- Action buttons: Robot toggle | Teleop toggle | Mapping toggle -->
+  <div class="man-btns">
+    <button class="man-btn man-btn-go" id="btn-robot"
+            onclick="cmdToggleRobot()">▶ Start Robot</button>
+    <button class="man-btn" id="btn-teleop"
+            onclick="cmdToggleTeleop()">🕹 Teleop</button>
+    <button class="man-btn man-btn-go" id="btn-mapping"
+            onclick="cmdToggleMapping()">▶ Mapping</button>
+    <button class="man-btn" id="btn-planner"
+            onclick="openPlanner()"
+            style="border-color:var(--blue);color:var(--blue)">🗺 Planner</button>
+  </div>
+
+  <!-- Map name row — only visible while mapping is active -->
+  <div class="save-row" id="map-save-row" style="display:none">
+    <input id="map-name" type="text" value="map_001"
+           autocomplete="off" autocorrect="off" spellcheck="false"
+           placeholder="map name">
+    <button class="man-btn" onclick="cmdSaveMap()" style="white-space:nowrap">
+      💾 Save Map
+    </button>
+  </div>
+</div>
+
+<!-- ── INITIAL POSE MODAL ─────────────────────────────────────────── -->
+<div id="pose-modal">
+  <div id="pose-modal-hdr">
+    <h2>📍 Set Initial Pose</h2>
+    <span id="pose-modal-hint">Click to place robot · hold &amp; drag to set direction</span>
+    <button id="pose-modal-cancel" onclick="closePoseModal()">✕ Cancel</button>
+  </div>
+  <canvas id="pose-canvas"></canvas>
+</div>
+
+<!-- ── COVERAGE PLANNER MODAL ─────────────────────────────────────── -->
+<div id="planner-modal">
+  <div id="planner-hdr">
+    <h2>🗺 Coverage Planner</h2>
+    <select id="planner-map-dd" onchange="plannerOnMapChange()">
+      <option value="">— select map —</option>
+    </select>
+    <span id="planner-map-info"></span>
+    <button class="pl-btn pl-btn-blue" onclick="plannerGenerateAll()">⚙ Generate All</button>
+    <button class="pl-btn pl-btn-green" onclick="plannerSave()">💾 Save Plan</button>
+    <button class="pl-btn pl-btn-red" onclick="plannerClearAll()">🗑 Clear All</button>
+    <button class="pl-btn pl-btn-close" onclick="closePlanner()">✕ Close</button>
+  </div>
+  <div id="planner-body">
+    <div id="planner-canvas-wrap">
+      <div id="planner-toolbar">
+        <span style="font-size:10px;color:var(--dim)">Tool:</span>
+        <button class="pl-tool-btn active" id="pl-tool-draw" onclick="setPlannerTool('draw')">✏ Draw Zone</button>
+        <button class="pl-tool-btn" id="pl-tool-pan" onclick="setPlannerTool('pan')">✋ Pan</button>
+        <span style="font-size:10px;color:var(--dim);margin-left:6px">Zoom:</span>
+        <button class="pl-tool-btn" onclick="plannerZoom(1/1.25)">−</button>
+        <span id="pl-zoom-lbl" style="font-size:10px;color:var(--dim);min-width:34px;text-align:center">100%</span>
+        <button class="pl-tool-btn" onclick="plannerZoom(1.25)">+</button>
+        <button class="pl-tool-btn" onclick="plannerFit()">Fit</button>
+        <span style="font-size:10px;color:var(--dim);margin-left:6px">
+          Drag to draw zone · click zone to select · scroll to zoom
+        </span>
+      </div>
+      <canvas id="planner-canvas"></canvas>
+      <div id="planner-status">Ready — load a map to begin</div>
+    </div>
+    <div id="planner-sidebar">
+      <div class="pl-sec">
+        <div class="pl-sec-title">Zones</div>
+        <div id="planner-zone-list"><div style="font-size:11px;color:var(--dim)">No zones yet</div></div>
+      </div>
+      <div class="pl-sec" id="planner-props" style="display:none">
+        <div class="pl-sec-title">Zone Properties — <span id="prop-key-lbl" style="color:var(--blue)"></span></div>
+        <div class="pl-prop-row">
+          <span class="pl-prop-lbl">Robot width</span>
+          <input class="pl-prop-inp" id="prop-rw" type="number" step="0.05" min="0.05" value="0.30"
+                 oninput="plannerPropChange()">
+          <span style="font-size:10px;color:var(--dim)">m</span>
+        </div>
+        <div class="pl-prop-row">
+          <span class="pl-prop-lbl">Stripe angle</span>
+          <input class="pl-prop-inp" id="prop-angle" type="number" step="5" min="0" max="360" value="0"
+                 oninput="plannerAngleSync()" style="width:52px;flex:none">
+          <input type="range" id="prop-angle-slider" min="0" max="180" value="0"
+                 oninput="plannerAngleSlider()">
+          <span style="font-size:10px;color:var(--dim)">°</span>
+        </div>
+        <div class="pl-prop-row">
+          <span class="pl-prop-lbl">Rect angle</span>
+          <input class="pl-prop-inp" id="prop-rect-angle" type="number" step="5" value="0"
+                 oninput="plannerPropChange()" style="width:52px;flex:none">
+          <div class="pl-rot-btns">
+            <button class="pl-rot-btn" onclick="plannerRotateRect(+15)">▲</button>
+            <button class="pl-rot-btn" onclick="plannerRotateRect(-15)">▼</button>
+          </div>
+          <span style="font-size:10px;color:var(--dim)">°</span>
+        </div>
+        <div id="prop-path-info" style="font-size:10px;color:var(--green);margin-bottom:6px"></div>
+        <button class="pl-btn pl-btn-blue" style="width:100%;padding:7px 0"
+                onclick="plannerGenerateSelected()">⚙ Generate Path for Selected Zone</button>
+      </div>
+      <div class="pl-sec">
+        <div class="pl-sec-title">Tips</div>
+        <div style="font-size:10px;color:var(--dim);line-height:1.7">
+          Draw tool → drag to create zone<br>
+          Pan tool → drag to pan map<br>
+          Click zone → select &amp; edit<br>
+          Scroll / pinch → zoom<br>
+          × on zone → delete<br>
+          Generate All → compute all paths<br>
+          Save Plan → writes paths/&lt;map&gt;.json
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Use CDN for socket.io client library -->
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+// ════════════════════════════════════════════════════════════════════
+// GLOBAL STATE
+// ════════════════════════════════════════════════════════════════════
+let plan   = {};
+let appSt  = {
+  is_running:false, is_paused:false, current_zone:null,
+  coverage_pct:0, robot_x:null, robot_y:null,
+  sequence:[], visited:[], ros_connected:false,
+};
+let visitedSet  = new Set();   // "zone:idx"
+let mapImg      = null;
+let nodeStatus  = {robot:false, slam:false, amcl:false, nav2:false, obstacle:false};
+let currentTab  = 'manual';
+
+// Manual-tab state
+let simMode    = false;
+let teleopOn   = false;
+let mappingOn  = false;
+let robotOn    = false;
+let obstacleOn = false;   // obstacle detector process running
+let _mapCounter = 1;
+
+// Zone palette
+const PALETTE = ['#E74C3C','#3498DB','#2ECC71','#F39C12','#9B59B6',
+                 '#1ABC9C','#E67E22','#E91E63','#00BCD4','#8BC34A',
+                 '#FF5722','#607D8B','#795548','#FFC107'];
+
+// ════════════════════════════════════════════════════════════════════
+// SOCKET.IO
+// ════════════════════════════════════════════════════════════════════
+const socket = io({transports:['websocket','polling']});
+
+socket.on('connect',     ()  => updateRos(true));
+socket.on('disconnect',  ()  => { appSt.ros_connected=false; updateRos(false); });
+socket.on('state',       (s) => applyState(s));
+socket.on('node_status', (ns)=> { nodeStatus={...nodeStatus,...ns}; updateNodeStatusUI(); });
+socket.on('toast',       (m) => toast(m));
+socket.on('obstacle_detected', (d) => setObstacleBanner(d.detected));
+
+function applyState(s) {
+  appSt = {...appSt, ...s};
+  visitedSet = new Set((s.visited||[]).map(v=>`${v.zone}:${v.idx}`));
+  updateStatusOverlay();
+  renderSequence();
+  updateButtons();
+}
+
+// ════════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ════════════════════════════════════════════════════════════════════
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+
+  const auto   = tab === 'auto';
+  const manual = tab === 'manual';
+
+  document.getElementById('map-wrap')    .style.display = auto   ? '' : 'none';
+  document.getElementById('bot-panel')   .style.display = auto   ? 'flex' : 'none';
+  document.getElementById('manual-panel').style.display = manual ? 'flex' : 'none';
+
+  // joy-wrap only shows in manual tab AND when teleop is active
+  document.getElementById('joy-wrap').style.display =
+    (manual && teleopOn) ? 'flex' : 'none';
+
+  document.getElementById('toast').classList.toggle('manual-mode', manual);
+
+  if (manual) {
+    if (teleopOn) {
+      resizeMapHalf();
+      resizeJoy();
+      if (!_joyRafRunning) { _joyRafRunning = true; joyLoop(); }
+    }
+    startLiveMapPoll();
+    fetch('/api/node_status').then(r=>r.json()).then(ns => {
+      nodeStatus = {...nodeStatus, ...ns};
+      updateNodeStatusUI();
+    });
+  } else {
+    if (!teleopOn) stopCmdVelLoop();
+    stopLiveMapPoll();
+    loadMaps();  // refresh map list when switching to auto tab
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+// ════════════════════════════════════════════════════════════════════
+// INITIAL LOAD
+// ════════════════════════════════════════════════════════════════════
+function init() {
+  startLiveMapPoll();
+
+  Promise.all([
+    fetch('/api/plan').then(r=>r.json()),
+    fetch('/api/state').then(r=>r.json()),
+    fetch('/api/node_status').then(r=>r.json()),
+  ]).then(([planData, stData, nsData]) => {
+    plan            = planData.plan || {};
+    appSt.sequence  = planData.sequence || [];
+    nodeStatus      = {...nodeStatus, ...nsData};
+    applyState(stData);
+    updateNodeStatusUI();
+    loadMaps();      // populate map selector
+    loadMapImage();  // pre-load map so it's ready when user switches to Auto
+  });
+}
+
+function loadMapImage() {
+  fetch('/api/map_image').then(r=>r.json()).then(d => {
+    if (!d.b64) {
+      document.getElementById('loading').querySelector('span').textContent =
+        'Map image not found — check pgm_file in plan JSON';
+      return;
+    }
+    mapImg = new Image();
+    mapImg.onload = () => {
+      document.getElementById('loading').style.display = 'none';
+      fitMap();
+    };
+    mapImg.src = 'data:image/png;base64,' + d.b64;
+  });
+}
+
+let _selectedMap = '';
+
+function loadMaps() {
+  fetch('/api/maps').then(r=>r.json()).then(d => {
+    _selectedMap = d.selected || '';
+    _renderMapSelector(d.maps || []);
+  });
+}
+
+function _renderMapSelector(maps) {
+  const dd = document.getElementById('map-sel-dd');
+  dd.innerHTML = '';
+  if (!maps.length) {
+    const opt = document.createElement('option');
+    opt.value = ''; opt.textContent = 'No maps found';
+    dd.appendChild(opt);
+    return;
+  }
+  maps.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    if (name === _selectedMap) opt.selected = true;
+    dd.appendChild(opt);
+  });
+}
+
+function selectMap(name) {
+  if (!name || name === _selectedMap) return;
+  socket.emit('select_map', {name});
+}
+
+socket.on('map_selected', d => {
+  _selectedMap = d.name;
+  const dd = document.getElementById('map-sel-dd');
+  if (dd) dd.value = _selectedMap;
+  loadMapImage();
+});
+
+// ════════════════════════════════════════════════════════════════════
+// AUTO TAB — MAP CANVAS
+// ════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('map-canvas');
+const ctx    = canvas.getContext('2d');
+let zoom = 1, panX = 0, panY = 0;
+let pulse = 0;
+
+function resizeCanvas() {
+  const w = document.getElementById('map-wrap');
+  canvas.width  = w.clientWidth;
+  canvas.height = w.clientHeight;
+}
+new ResizeObserver(resizeCanvas).observe(document.getElementById('map-wrap'));
+resizeCanvas();
+
+function fitMap() {
+  if (!mapImg) return;
+  const cw = canvas.width, ch = canvas.height;
+  zoom = Math.min(cw / mapImg.width, ch / mapImg.height) * 0.96;
+  panX = (cw - mapImg.width  * zoom) / 2;
+  panY = (ch - mapImg.height * zoom) / 2;
+}
+
+function applyZoom(nz, cx, cy) {
+  const old = zoom;
+  zoom = Math.max(0.08, Math.min(12, nz));
+  panX = cx - (cx - panX) * (zoom / old);
+  panY = cy - (cy - panY) * (zoom / old);
+}
+
+// ── Coordinate transforms ─────────────────────────────────────────
+function worldToCanvas(wx, wy) {
+  const mi   = plan.map || {};
+  const res  = mi.resolution || 0.05;
+  const orig = mi.origin     || [0, 0, 0];
+  const h    = mi.height_px  || (mapImg ? mapImg.height : 400);
+  const px   = (wx - orig[0]) / res;
+  const py   = h - (wy - orig[1]) / res;
+  return [px * zoom + panX, py * zoom + panY];
+}
+
+function pixToCanvas(px, py) {
+  return [px * zoom + panX, py * zoom + panY];
+}
+
+// ── Render loop ───────────────────────────────────────────────────
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (mapImg) {
+    ctx.drawImage(mapImg, panX, panY, mapImg.width * zoom, mapImg.height * zoom);
+  } else {
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  if (Object.keys(plan).length === 0) { requestAnimationFrame(render); return; }
+
+  const seq   = appSt.sequence;
+  const zones = plan.zones || {};
+
+  // Zone fills + outlines
+  for (const [key, zone] of Object.entries(zones)) {
+    const pb = zone.pixel_bounds;
+    if (!pb) continue;
+    const [x1, y1] = pixToCanvas(pb.x1, pb.y1);
+    const [x2, y2] = pixToCanvas(pb.x2, pb.y2);
+    const col      = zone.color || PALETTE[key.charCodeAt(0) % PALETTE.length];
+    const isActive = key === appSt.current_zone;
+
+    ctx.save();
+    ctx.globalAlpha = isActive ? 0.22 : 0.12;
+    ctx.fillStyle   = col;
+    ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.restore();
+
+    ctx.strokeStyle = isActive ? '#fff' : col;
+    ctx.lineWidth   = isActive ? 2.5 : 1.5;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+    if (zoom > 0.25) {
+      const fs = Math.max(9, Math.min(22, Math.round(14 * zoom)));
+      ctx.font        = `700 ${fs}px sans-serif`;
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur  = 3;
+      ctx.fillStyle   = '#fff';
+      ctx.fillText(key.toUpperCase(), x1 + 5, y1 + fs + 4);
+      ctx.shadowBlur  = 0;
+    }
+  }
+
+  // Coverage paths
+  for (const key of seq) {
+    const zone = zones[key];
+    if (zone?.waypoints?.length) drawZonePaths(key, zone);
+  }
+
+  drawRobot();
+
+  pulse = (pulse + 0.055) % (Math.PI * 2);
+  requestAnimationFrame(render);
+}
+
+function drawZonePaths(key, zone) {
+  const wps    = zone.waypoints;
+  const stripes = {};
+  wps.forEach((wp, idx) => {
+    if (wp.type === 'transition') return;
+    const s = wp.stripe ?? 0;
+    (stripes[s] = stripes[s] || []).push({wp, idx});
+  });
+
+  const dotR = Math.max(2, 2.5 * zoom);
+
+  for (const pts of Object.values(stripes)) {
+    if (!pts.length) continue;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const aVis = visitedSet.has(`${key}:${a.idx}`);
+      const bVis = visitedSet.has(`${key}:${b.idx}`);
+      const [ax, ay] = worldToCanvas(a.wp.x, a.wp.y);
+      const [bx, by] = worldToCanvas(b.wp.x, b.wp.y);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.strokeStyle = (aVis && bVis) ? '#22c55e' : '#f97316';
+      ctx.lineWidth   = Math.max(1.5, 2.5 * zoom);
+      ctx.stroke();
+    }
+    for (const {wp, idx} of pts) {
+      const [cx2, cy2] = worldToCanvas(wp.x, wp.y);
+      ctx.beginPath();
+      ctx.arc(cx2, cy2, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = visitedSet.has(`${key}:${idx}`) ? '#22c55e' : '#f97316';
+      ctx.fill();
+    }
+  }
+
+  wps.forEach((wp, idx) => {
+    if (wp.type !== 'transition' || idx === 0) return;
+    const prev = wps[idx - 1];
+    const [ax, ay] = worldToCanvas(prev.x, prev.y);
+    const [bx, by] = worldToCanvas(wp.x, wp.y);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = 'rgba(249,115,22,.35)';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  const first = wps.find(wp => wp.type === 'coverage');
+  if (first) {
+    const [fx, fy] = worldToCanvas(first.x, first.y);
+    const col      = zone.color || '#3498DB';
+    ctx.beginPath();
+    ctx.arc(fx, fy, dotR + 2, 0, Math.PI * 2);
+    ctx.fillStyle   = '#fff';
+    ctx.fill();
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+  }
+}
+
+function drawRobot() {
+  if (appSt.robot_x === null || appSt.robot_y === null) return;
+  const [rx, ry] = worldToCanvas(appSt.robot_x, appSt.robot_y);
+
+  const pr    = 7 + 3.5 * Math.abs(Math.sin(pulse));
+  const alpha = 0.55 - 0.35 * Math.abs(Math.sin(pulse));
+  ctx.beginPath();
+  ctx.arc(rx, ry, pr, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(239,68,68,${alpha.toFixed(2)})`;
+  ctx.lineWidth   = 2.5;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(rx, ry, 6, 0, Math.PI * 2);
+  ctx.fillStyle   = '#ef4444';
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth   = 1.5;
+  ctx.stroke();
+
+  if (appSt.robot_yaw != null) {
+    const len = 14;
+    const ex  = rx + len * Math.cos(appSt.robot_yaw);
+    const ey  = ry - len * Math.sin(appSt.robot_yaw);
+    ctx.beginPath();
+    ctx.moveTo(rx, ry);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+  }
+}
+
+render();
+
+// ── Touch / Mouse gestures (map pan + zoom) ──────────────────────
+let _dragging = false, _dragAnchor = null, _pinchAnchor = null;
+
+canvas.addEventListener('touchstart', onTouchStart, {passive:false});
+canvas.addEventListener('touchmove',  onTouchMove,  {passive:false});
+canvas.addEventListener('touchend',   onTouchEnd,   {passive:false});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  applyZoom(zoom * (e.deltaY < 0 ? 1.12 : 1/1.12),
+            e.clientX - r.left, e.clientY - r.top);
+}, {passive:false});
+
+canvas.addEventListener('mousedown', e => {
+  _dragging   = true;
+  _dragAnchor = {mx:e.clientX, my:e.clientY, px:panX, py:panY};
+});
+canvas.addEventListener('mousemove', e => {
+  if (!_dragging || !_dragAnchor) return;
+  panX = _dragAnchor.px + e.clientX - _dragAnchor.mx;
+  panY = _dragAnchor.py + e.clientY - _dragAnchor.my;
+});
+canvas.addEventListener('mouseup',    () => { _dragging = false; });
+canvas.addEventListener('mouseleave', () => { _dragging = false; });
+
+function onTouchStart(e) {
+  e.preventDefault();
+  const t = e.touches;
+  if (t.length === 1) {
+    _dragging    = true;
+    _pinchAnchor = null;
+    _dragAnchor  = {mx:t[0].clientX, my:t[0].clientY, px:panX, py:panY};
+  } else if (t.length === 2) {
+    _dragging = false;
+    const r   = canvas.getBoundingClientRect();
+    _pinchAnchor = {
+      dist: Math.hypot(t[1].clientX-t[0].clientX, t[1].clientY-t[0].clientY),
+      zoom,
+      midX: (t[0].clientX+t[1].clientX)/2 - r.left,
+      midY: (t[0].clientY+t[1].clientY)/2 - r.top,
+    };
+  }
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  const t = e.touches;
+  if (t.length === 1 && _dragging && _dragAnchor) {
+    panX = _dragAnchor.px + t[0].clientX - _dragAnchor.mx;
+    panY = _dragAnchor.py + t[0].clientY - _dragAnchor.my;
+  } else if (t.length === 2 && _pinchAnchor) {
+    const dist = Math.hypot(t[1].clientX-t[0].clientX, t[1].clientY-t[0].clientY);
+    applyZoom(_pinchAnchor.zoom * dist / _pinchAnchor.dist,
+              _pinchAnchor.midX, _pinchAnchor.midY);
+  }
+}
+function onTouchEnd(e) {
+  const t = e.touches;
+  if      (t.length === 0) { _dragging = false; _pinchAnchor = null; }
+  else if (t.length === 1) {
+    _dragging   = true;
+    _dragAnchor = {mx:t[0].clientX, my:t[0].clientY, px:panX, py:panY};
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AUTO TAB — SEQUENCE UI
+// ════════════════════════════════════════════════════════════════════
+function zoneColor(key) {
+  const z = (plan.zones||{})[key];
+  return z?.color || PALETTE[key.charCodeAt(0) % PALETTE.length];
+}
+
+function zonePct(key) {
+  const wps = (plan.zones?.[key]?.waypoints || []);
+  let total = 0, done = 0;
+  wps.forEach((wp, idx) => {
+    if (wp.type !== 'coverage') return;
+    total++;
+    if (visitedSet.has(`${key}:${idx}`)) done++;
+  });
+  return total ? Math.round(done / total * 100) : 0;
+}
+
+function zoneIcon(key) {
+  const pct = zonePct(key);
+  if (pct >= 100)                    return {icon:'✓', col:'var(--green)'};
+  if (key === appSt.current_zone)    return {icon:'▶', col:'var(--accent)'};
+  return {icon:'○', col:'var(--dim)'};
+}
+
+function renderSequence() {
+  const list = document.getElementById('seq-list');
+  list.innerHTML = '';
+  const seq = appSt.sequence;
+
+  if (!seq.length) {
+    list.innerHTML = '<div class="seq-empty">No zones in plan — load a coverage_plan.json</div>';
+    return;
+  }
+
+  seq.forEach(key => {
+    const col  = zoneColor(key);
+    const pct  = zonePct(key);
+    const {icon, col: icol} = zoneIcon(key);
+    const done = pct >= 100;
+    const act  = key === appSt.current_zone;
+
+    const card = document.createElement('div');
+    card.className   = `seq-card${act?' active':''}${done?' done':''}`;
+    card.dataset.key = key;
+    card.innerHTML   = `
+      <span class="drag-h" title="Drag to reorder">⠿</span>
+      <div class="zone-badge" style="background:${col}">${key.toUpperCase()}</div>
+      <div class="card-info">
+        <div class="card-top">
+          <span class="card-name">${key.toUpperCase()}</span>
+          <span class="card-pct">${pct}%</span>
+        </div>
+        <div class="card-bar"><div class="card-fill" style="width:${pct}%"></div></div>
+      </div>
+      <span class="card-status" style="color:${icol}">${icon}</span>
+      <button class="btn-del" title="Remove" onclick="removeZone('${key}')">×</button>`;
+    list.appendChild(card);
+  });
+
+  initDragSort(list);
+}
+
+function removeZone(key) {
+  appSt.sequence = appSt.sequence.filter(k => k !== key);
+  socket.emit('update_sequence', {sequence: appSt.sequence});
+  renderSequence();
+}
+
+// Drag-to-reorder (Pointer Events)
+function initDragSort(list) {
+  let ghost = null, ph = null, draggingCard = null, oy = 0;
+
+  list.addEventListener('pointerdown', e => {
+    const handle = e.target.closest('.drag-h');
+    if (!handle) return;
+    const card = handle.closest('.seq-card');
+    if (!card) return;
+    e.preventDefault();
+
+    const r = card.getBoundingClientRect();
+    oy = e.clientY - r.top;
+
+    ghost = card.cloneNode(true);
+    ghost.style.cssText = [
+      `position:fixed`,`width:${r.width}px`,`left:${r.left}px`,
+      `top:${r.top}px`,`z-index:9999`,`pointer-events:none`,
+      `opacity:.88`,`box-shadow:0 10px 36px rgba(0,0,0,.55)`,
+      `border-radius:9px`,`transition:none`
+    ].join(';');
+    document.body.appendChild(ghost);
+
+    ph = document.createElement('div');
+    ph.className  = 'seq-placeholder';
+    ph.style.height = r.height + 'px';
+    card.parentNode.insertBefore(ph, card);
+
+    draggingCard = card;
+    card.classList.add('ghost');
+    card.setPointerCapture(e.pointerId);
+
+    const onMove = mv => {
+      ghost.style.top = (mv.clientY - oy) + 'px';
+      const siblings = [...list.querySelectorAll('.seq-card:not(.ghost)')];
+      let placed = false;
+      for (const sib of siblings) {
+        if (mv.clientY < sib.getBoundingClientRect().top + sib.offsetHeight / 2) {
+          list.insertBefore(ph, sib); placed = true; break;
+        }
+      }
+      if (!placed) list.appendChild(ph);
+    };
+
+    const onUp = () => {
+      ph.parentNode.insertBefore(draggingCard, ph);
+      draggingCard.classList.remove('ghost');
+      ghost.remove();
+      ph.remove();
+      const newSeq = [...list.querySelectorAll('.seq-card')].map(c => c.dataset.key);
+      appSt.sequence = newSeq;
+      socket.emit('update_sequence', {sequence: newSeq});
+      ghost = ph = draggingCard = null;
+      card.removeEventListener('pointermove', onMove);
+      card.removeEventListener('pointerup',   onUp);
+    };
+
+    card.addEventListener('pointermove', onMove);
+    card.addEventListener('pointerup',   onUp);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AUTO TAB — CONTROLS
+// ════════════════════════════════════════════════════════════════════
+function cmdStartAutonomy() {
+  socket.emit('start_autonomy', {sequence: appSt.sequence});
+  toast('Launching AMCL + Nav2… Set initial pose then press Start Coverage');
+}
+
+function cmdStartCoverage() {
+  socket.emit('start_coverage');
+  toast('▶ Coverage started');
+}
+
+function cmdStopAutonomy() {
+  socket.emit('stop_autonomy');
+  toast('⏹ Stopping all autonomy');
+}
+
+function cmdToggleObstacle() {
+  if (obstacleOn) {
+    socket.emit('stop_obstacle_detector');
+  } else {
+    socket.emit('start_obstacle_detector');
+    toast('Starting obstacle detector…');
+  }
+}
+
+function setObstacleBanner(detected) {
+  const banner = document.getElementById('obstacle-banner');
+  if (banner) banner.style.display = detected ? 'block' : 'none';
+}
+
+function cmdPause() {
+  socket.emit('cmd_pause');
+}
+
+function fitMap() {
+  const cw = canvas.width, ch = canvas.height;
+  if (!mapImg || cw === 0 || ch === 0) return;
+  zoom = Math.min(cw / mapImg.width, ch / mapImg.height) * 0.96;
+  panX = (cw - mapImg.width  * zoom) / 2;
+  panY = (ch - mapImg.height * zoom) / 2;
+}
+
+function updateButtons() {
+  const running  = appSt.is_running;
+  const paused   = appSt.is_paused;
+  const autoUp   = nodeStatus.autonomy;
+  document.getElementById('btn-start')   .disabled = autoUp;
+  document.getElementById('btn-coverage').disabled = !autoUp || running;
+  document.getElementById('btn-pause')   .disabled = !running;
+  document.getElementById('btn-stop')    .disabled = !autoUp;
+  document.getElementById('btn-pause').textContent = paused ? '▶ Resume' : '⏸ Pause';
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AUTO TAB — STATUS OVERLAY
+// ════════════════════════════════════════════════════════════════════
+function updateStatusOverlay() {
+  const z   = appSt.current_zone;
+  const pct = appSt.coverage_pct;
+  document.getElementById('ms-zone').textContent = z ? z.toUpperCase() : '—';
+  document.getElementById('ms-bar') .style.width = pct + '%';
+  document.getElementById('ms-pct') .textContent = pct.toFixed(1) + ' %';
+}
+
+function updateRos(connected) {
+  appSt.ros_connected = connected;
+  const dot = document.getElementById('ros-dot');
+  const lbl = document.getElementById('ros-lbl');
+  dot.className  = 'ros-dot ' + (connected ? 'on' : 'off');
+  lbl.textContent = 'ROS';
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AUTO TAB — BOTTOM PANEL EXPAND / COLLAPSE
+// ════════════════════════════════════════════════════════════════════
+document.getElementById('bot-handle').addEventListener('click', () => {
+  const panel = document.getElementById('bot-panel');
+  panel.classList.toggle('expanded');
+  const h = panel.classList.contains('expanded') ? '58vh' : '245px';
+  document.documentElement.style.setProperty('--bot', h);
+});
+
+// ════════════════════════════════════════════════════════════════════
+// NODE STATUS UI
+// ════════════════════════════════════════════════════════════════════
+function updateNodeStatusUI() {
+  // Auto tab dots
+  ['amcl', 'nav2', 'slam'].forEach(k => {
+    const el = document.getElementById(`nd-${k}-auto`);
+    if (el) el.className = 'nd ' + (nodeStatus[k] ? 'on' : 'off');
+  });
+
+  // Obstacle detector dot + button
+  obstacleOn = nodeStatus.obstacle;
+  const elObs = document.getElementById('nd-obstacle-auto');
+  if (elObs) elObs.className = 'nd ' + (obstacleOn ? 'on' : 'off');
+  const btnObs = document.getElementById('btn-obstacle');
+  if (btnObs) {
+    if (obstacleOn) {
+      btnObs.style.borderColor = 'var(--red)';
+      btnObs.style.color       = 'var(--red)';
+      btnObs.textContent       = '⏹ Obstacle Det.';
+    } else {
+      btnObs.style.borderColor = 'var(--orange)';
+      btnObs.style.color       = 'var(--orange)';
+      btnObs.textContent       = '🛡 Obstacle Detector';
+    }
+  }
+  // Manual tab dots
+  const manMap = {robot:'nd-robot', slam:'nd-slam', amcl:'nd-amcl-m', nav2:'nd-nav2-m'};
+  for (const [k, id] of Object.entries(manMap)) {
+    const el = document.getElementById(id);
+    if (el) el.className = 'nd ' + (nodeStatus[k] ? 'on' : 'off');
+  }
+
+  // Robot toggle button
+  robotOn = nodeStatus.robot;
+  const btnR = document.getElementById('btn-robot');
+  if (btnR) {
+    if (robotOn) {
+      btnR.className   = 'man-btn man-btn-stop';
+      btnR.textContent = '⏹ Stop Robot';
+    } else {
+      btnR.className   = 'man-btn man-btn-go';
+      btnR.textContent = '▶ Start Robot';
+    }
+  }
+
+  // Mapping toggle button + save row visibility
+  const wasMapping = mappingOn;
+  mappingOn = nodeStatus.slam;
+  const btnM = document.getElementById('btn-mapping');
+  if (btnM) {
+    if (mappingOn) {
+      btnM.className   = 'man-btn man-btn-stop';
+      btnM.textContent = '⏹ Mapping';
+    } else {
+      btnM.className   = 'man-btn man-btn-go';
+      btnM.textContent = '▶ Mapping';
+    }
+  }
+  // Sync save row with actual mapping state
+  const saveRow = document.getElementById('map-save-row');
+  if (saveRow) saveRow.style.display = mappingOn ? 'flex' : 'none';
+  document.documentElement.style.setProperty(
+    '--man-bot', mappingOn ? '154px' : '108px');
+  // Pre-fill map name when mapping starts
+  if (mappingOn && !wasMapping) {
+    document.getElementById('map-name').value = _nextMapName();
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SIM MODE
+// ════════════════════════════════════════════════════════════════════
+function onSimToggle(checked) {
+  simMode = checked;
+  document.getElementById('sim-label').classList.toggle('active', checked);
+  socket.emit('set_sim', {sim: checked});
+  toast(checked ? 'Sim ON — TwistStamped · use_sim_time' : 'Sim OFF — Twist · real robot');
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MANUAL TAB — ROBOT / TELEOP / MAPPING TOGGLES
+// ════════════════════════════════════════════════════════════════════
+function cmdToggleRobot() {
+  if (robotOn) {
+    socket.emit('stop_robot');
+    toast('Stopping robot…');
+  } else {
+    socket.emit('start_robot');
+    toast(simMode ? 'Starting TurtleBot3 Gazebo…' : 'Starting Create 2…');
+  }
+}
+
+function cmdToggleTeleop() {
+  teleopOn = !teleopOn;
+  const btn  = document.getElementById('btn-teleop');
+  const wrap = document.getElementById('joy-wrap');
+
+  if (teleopOn) {
+    btn.className   = 'man-btn man-btn-active';
+    btn.textContent = '⏹ Teleop';
+    if (currentTab === 'manual') {
+      wrap.style.display = 'flex';
+      resizeMapHalf();
+      resizeJoy();
+      if (!_joyRafRunning) { _joyRafRunning = true; joyLoop(); }
+    }
+  } else {
+    btn.className   = 'man-btn';
+    btn.textContent = '🕹 Teleop';
+    wrap.style.display = 'none';
+    joyActive = false;
+    joyDX = 0; joyDY = 0;
+    stopCmdVelLoop();
+  }
+}
+
+function cmdToggleMapping() {
+  if (mappingOn) {
+    socket.emit('stop_mapping');
+    toast('Stopping mapping…');
+  } else {
+    socket.emit('start_mapping');
+    toast(simMode ? 'Starting SLAM (sim time)…' : 'Starting SLAM mapping…');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MANUAL TAB — MAP SAVE
+// ════════════════════════════════════════════════════════════════════
+function _nextMapName() {
+  return 'map_' + String(_mapCounter).padStart(3, '0');
+}
+
+function cmdSaveMap() {
+  const inp  = document.getElementById('map-name');
+  const name = (inp.value || '').trim() || _nextMapName();
+  socket.emit('save_map', {name});
+  // Optimistically advance counter
+  _mapCounter++;
+  inp.value = _nextMapName();
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MANUAL TAB — VIRTUAL JOYSTICK
+// ════════════════════════════════════════════════════════════════════
+const MAX_LINEAR  = 0.3;   // m/s
+const MAX_ANGULAR = 0.8;   // rad/s
+
+let joyActive     = false;
+let joyDX = 0, joyDY = 0;
+let joyPointerId  = null;
+let _joyRafRunning = false;
+let _cmdVelInterval = null;
+
+const joyCanvas = document.getElementById('joy-canvas');
+const joyCtx    = joyCanvas.getContext('2d');
+
+function resizeJoy() {
+  const half = document.getElementById('joy-half');
+  if (!half || half.clientWidth === 0 || half.clientHeight === 0) return;
+  joyCanvas.width  = half.clientWidth;
+  joyCanvas.height = half.clientHeight;
+}
+new ResizeObserver(() => {
+  if (currentTab === 'manual' && teleopOn) resizeJoy();
+}).observe(document.getElementById('joy-half'));
+
+function joyLoop() {
+  if (currentTab !== 'manual' || !teleopOn) { _joyRafRunning = false; return; }
+  drawJoy();
+  requestAnimationFrame(joyLoop);
+}
+
+function drawJoy() {
+  const w = joyCanvas.width, h = joyCanvas.height;
+  joyCtx.clearRect(0, 0, w, h);
+  if (!w || !h) return;
+
+  const cx = w / 2, cy = h / 2;
+  const R  = Math.min(cx, cy) * 0.65;
+  const TR = R * 0.28;
+
+  // Outer ring
+  joyCtx.beginPath();
+  joyCtx.arc(cx, cy, R, 0, Math.PI * 2);
+  joyCtx.fillStyle = 'rgba(96,165,250,0.08)';
+  joyCtx.fill();
+  joyCtx.strokeStyle = 'rgba(96,165,250,0.5)';
+  joyCtx.lineWidth = 3;
+  joyCtx.stroke();
+
+  // Inner ring
+  joyCtx.beginPath();
+  joyCtx.arc(cx, cy, R * 0.5, 0, Math.PI * 2);
+  joyCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+  joyCtx.lineWidth = 2;
+  joyCtx.stroke();
+
+  // Crosshair
+  joyCtx.setLineDash([5, 5]);
+  joyCtx.strokeStyle = 'rgba(255,255,255,0.25)';
+  joyCtx.lineWidth = 2;
+  joyCtx.beginPath();
+  joyCtx.moveTo(cx - R, cy); joyCtx.lineTo(cx + R, cy);
+  joyCtx.moveTo(cx, cy - R); joyCtx.lineTo(cx, cy + R);
+  joyCtx.stroke();
+  joyCtx.setLineDash([]);
+
+  // Direction labels
+  const fs = Math.max(16, Math.min(24, R * 0.18));
+  joyCtx.font          = `bold ${fs}px sans-serif`;
+  joyCtx.fillStyle     = 'rgba(255,255,255,0.6)';
+  joyCtx.textAlign     = 'center';
+  joyCtx.textBaseline  = 'middle';
+  joyCtx.fillText('▲', cx,            cy - R * 0.76);
+  joyCtx.fillText('▼', cx,            cy + R * 0.76);
+  joyCtx.fillText('◄', cx - R * 0.76, cy);
+  joyCtx.fillText('►', cx + R * 0.76, cy);
+  joyCtx.textBaseline = 'alphabetic';
+
+  // Thumb
+  const tx = cx + (joyActive ? joyDX * R : 0);
+  const ty = cy + (joyActive ? joyDY * R : 0);
+  const g  = joyCtx.createRadialGradient(tx, ty, 0, tx, ty, TR);
+  if (joyActive) {
+    g.addColorStop(0, '#60a5fa');
+    g.addColorStop(1, 'rgba(59,130,246,0.5)');
+  } else {
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(1, 'rgba(255,255,255,0.3)');
+  }
+  joyCtx.beginPath();
+  joyCtx.arc(tx, ty, TR, 0, Math.PI * 2);
+  joyCtx.fillStyle   = g;
+  joyCtx.fill();
+  joyCtx.strokeStyle = joyActive ? '#3b82f6' : 'rgba(255,255,255,0.7)';
+  joyCtx.lineWidth   = 3;
+  joyCtx.stroke();
+}
+
+// ── Joystick pointer events ───────────────────────────────────────
+joyCanvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  joyCanvas.setPointerCapture(e.pointerId);
+  joyActive    = true;
+  joyPointerId = e.pointerId;
+  _updateJoy(e);
+  startCmdVelLoop();
+}, {passive: false});
+
+joyCanvas.addEventListener('pointermove', e => {
+  if (!joyActive || e.pointerId !== joyPointerId) return;
+  e.preventDefault();
+  _updateJoy(e);
+}, {passive: false});
+
+joyCanvas.addEventListener('pointerup', e => {
+  if (e.pointerId === joyPointerId) _joyRelease();
+});
+joyCanvas.addEventListener('pointercancel', e => {
+  if (e.pointerId === joyPointerId) _joyRelease();
+});
+
+function _updateJoy(e) {
+  const r = joyCanvas.getBoundingClientRect();
+  const w = joyCanvas.width, h = joyCanvas.height;
+  const R = Math.min(w, h) / 2 * 0.65;
+  let dx = (e.clientX - r.left) - w / 2;
+  let dy = (e.clientY - r.top)  - h / 2;
+  const d = Math.hypot(dx, dy);
+  if (d > R) { dx = dx / d * R; dy = dy / d * R; }
+  joyDX = dx / R;
+  joyDY = dy / R;
+  _updateSpeedDisplay();
+}
+
+function _joyRelease() {
+  joyActive = false;
+  joyDX = 0; joyDY = 0;
+  stopCmdVelLoop();
+  _updateSpeedDisplay();
+}
+
+function _updateSpeedDisplay() {
+  document.getElementById('joy-linear') .textContent = (-joyDY * MAX_LINEAR) .toFixed(2);
+  document.getElementById('joy-angular').textContent = (-joyDX * MAX_ANGULAR).toFixed(2);
+}
+
+// ── cmd_vel publish loop (10 Hz while joystick held) ──────────────
+function startCmdVelLoop() {
+  if (_cmdVelInterval) return;
+  _cmdVelInterval = setInterval(() => {
+    if (!joyActive) return;
+    socket.emit('cmd_vel', {
+      linear_x:  -joyDY * MAX_LINEAR,
+      angular_z: -joyDX * MAX_ANGULAR,
+    });
+  }, 100);
+}
+
+function stopCmdVelLoop() {
+  clearInterval(_cmdVelInterval);
+  _cmdVelInterval = null;
+  socket.emit('cmd_vel', {linear_x: 0, angular_z: 0});
+  document.getElementById('joy-linear') .textContent = '0.00';
+  document.getElementById('joy-angular').textContent = '0.00';
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MANUAL TAB — LIVE MAP (left half of split view)
+// ════════════════════════════════════════════════════════════════════
+const mapFullCanvas = document.getElementById('map-full-canvas');
+const mapFullCtx    = mapFullCanvas.getContext('2d');
+
+function resizeMapHalf() {
+  const half = document.getElementById('map-half');
+  if (!half || half.clientWidth === 0 || half.clientHeight === 0) return;
+  mapFullCanvas.width  = half.clientWidth;
+  mapFullCanvas.height = half.clientHeight;
+}
+new ResizeObserver(() => {
+  if (currentTab === 'manual' && teleopOn) resizeMapHalf();
+}).observe(document.getElementById('map-half'));
+
+let _liveMapInterval = null;
+
+function startLiveMapPoll() {
+  if (_liveMapInterval) return;
+  fetchLiveMap();
+  _liveMapInterval = setInterval(fetchLiveMap, 2000);
+}
+
+function stopLiveMapPoll() {
+  clearInterval(_liveMapInterval);
+  _liveMapInterval = null;
+}
+
+function fetchLiveMap() {
+  fetch('/api/live_map_image').then(r => r.json()).then(d => {
+    const w = mapFullCanvas.width, h = mapFullCanvas.height;
+    if (!w || !h) return;
+    mapFullCtx.clearRect(0, 0, w, h);
+    const emptyEl = document.getElementById('map-half-empty');
+    if (!d.b64) {
+      mapFullCtx.fillStyle = '#0d1117';
+      mapFullCtx.fillRect(0, 0, w, h);
+      if (emptyEl) emptyEl.style.display = 'flex';
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    const img = new Image();
+    img.onload = () => mapFullCtx.drawImage(img, 0, 0, w, h);
+    img.src = 'data:image/png;base64,' + d.b64;
+  }).catch(() => {});
+}
+
+// ════════════════════════════════════════════════════════════════════
+// TOAST
+// ════════════════════════════════════════════════════════════════════
+let _toastT = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  if (_toastT) clearTimeout(_toastT);
+  _toastT = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// INITIAL POSE MODAL
+// ════════════════════════════════════════════════════════════════════
+const poseCanvas = document.getElementById('pose-canvas');
+const poseCtx    = poseCanvas.getContext('2d');
+
+let _mZoom = 1, _mPanX = 0, _mPanY = 0;
+let _poseClick  = null;   // {cx, cy} canvas coords after first click
+let _poseDrag   = null;   // {cx, cy} canvas coords while dragging
+let _posePhase  = 'idle'; // 'idle' | 'placed' | 'dragging'
+let _posePtrId  = null;
+
+function openPoseModal() {
+  if (!mapImg) { toast('Map not loaded yet'); return; }
+  _posePhase = 'idle';
+  _poseClick = null;
+  _poseDrag  = null;
+  document.getElementById('pose-modal').classList.add('open');
+  _fitPoseMap();
+  document.getElementById('pose-modal-hint').textContent =
+    'Click to place robot · hold & drag to set direction';
+  _renderPose();
+}
+
+function closePoseModal() {
+  document.getElementById('pose-modal').classList.remove('open');
+  _posePhase = 'idle';
+  _poseClick = null;
+  _poseDrag  = null;
+}
+
+function _fitPoseMap() {
+  poseCanvas.width  = poseCanvas.clientWidth  || window.innerWidth;
+  poseCanvas.height = poseCanvas.clientHeight || (window.innerHeight - 52);
+  const cw = poseCanvas.width, ch = poseCanvas.height;
+  _mZoom = Math.min(cw / mapImg.width, ch / mapImg.height) * 0.96;
+  _mPanX = (cw - mapImg.width  * _mZoom) / 2;
+  _mPanY = (ch - mapImg.height * _mZoom) / 2;
+}
+
+new ResizeObserver(() => {
+  if (!document.getElementById('pose-modal').classList.contains('open')) return;
+  _fitPoseMap();
+  _renderPose();
+}).observe(poseCanvas);
+
+function _poseCanvasToWorld(cx, cy) {
+  const mi   = plan.map || {};
+  const res  = mi.resolution || 0.05;
+  const orig = mi.origin     || [0, 0, 0];
+  const h    = mi.height_px  || (mapImg ? mapImg.height : 400);
+  const px   = (cx - _mPanX) / _mZoom;
+  const py   = (cy - _mPanY) / _mZoom;
+  return [px * res + orig[0], (h - py) * res + orig[1]];
+}
+
+function _renderPose() {
+  const w = poseCanvas.width, h = poseCanvas.height;
+  poseCtx.clearRect(0, 0, w, h);
+
+  // Map image
+  if (mapImg) {
+    poseCtx.drawImage(mapImg, _mPanX, _mPanY, mapImg.width * _mZoom, mapImg.height * _mZoom);
+  }
+
+  if (!_poseClick) return;
+  const {cx, cy} = _poseClick;
+
+  // Draw arrow if dragging
+  if (_poseDrag) {
+    const dx = _poseDrag.cx - cx;
+    const dy = _poseDrag.cy - cy;
+    const len = Math.hypot(dx, dy);
+    if (len > 4) {
+      const ux = dx / len, uy = dy / len;
+      const arrowLen = Math.max(len, 30);
+      const ex = cx + ux * arrowLen, ey = cy + uy * arrowLen;
+
+      poseCtx.beginPath();
+      poseCtx.moveTo(cx, cy);
+      poseCtx.lineTo(ex, ey);
+      poseCtx.strokeStyle = '#facc15';
+      poseCtx.lineWidth   = 3;
+      poseCtx.stroke();
+
+      // Arrowhead
+      const aw = 10, al = 16;
+      const nx = -uy, ny = ux;
+      poseCtx.beginPath();
+      poseCtx.moveTo(ex, ey);
+      poseCtx.lineTo(ex - ux * al + nx * aw, ey - uy * al + ny * aw);
+      poseCtx.lineTo(ex - ux * al - nx * aw, ey - uy * al - ny * aw);
+      poseCtx.closePath();
+      poseCtx.fillStyle = '#facc15';
+      poseCtx.fill();
+    }
+  }
+
+  // Position dot
+  poseCtx.beginPath();
+  poseCtx.arc(cx, cy, 10, 0, Math.PI * 2);
+  poseCtx.fillStyle = 'rgba(239,68,68,0.8)';
+  poseCtx.fill();
+  poseCtx.strokeStyle = '#fff';
+  poseCtx.lineWidth   = 2.5;
+  poseCtx.stroke();
+}
+
+// Pointer events
+poseCanvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  poseCanvas.setPointerCapture(e.pointerId);
+  _posePtrId = e.pointerId;
+  const r = poseCanvas.getBoundingClientRect();
+  _poseClick = {cx: e.clientX - r.left, cy: e.clientY - r.top};
+  _poseDrag  = null;
+  _posePhase = 'placed';
+  document.getElementById('pose-modal-hint').textContent =
+    'Hold & drag to set facing direction, release to confirm';
+  _renderPose();
+}, {passive: false});
+
+poseCanvas.addEventListener('pointermove', e => {
+  if (!_poseClick || e.pointerId !== _posePtrId) return;
+  e.preventDefault();
+  const r = poseCanvas.getBoundingClientRect();
+  _poseDrag = {cx: e.clientX - r.left, cy: e.clientY - r.top};
+  _posePhase = 'dragging';
+  _renderPose();
+}, {passive: false});
+
+poseCanvas.addEventListener('pointerup', e => {
+  if (e.pointerId !== _posePtrId || !_poseClick) return;
+  e.preventDefault();
+
+  const [wx, wy] = _poseCanvasToWorld(_poseClick.cx, _poseClick.cy);
+
+  let yaw = 0;
+  if (_poseDrag) {
+    const dx = _poseDrag.cx - _poseClick.cx;
+    const dy = _poseDrag.cy - _poseClick.cy;
+    if (Math.hypot(dx, dy) > 5) {
+      yaw = Math.atan2(-dy, dx);  // canvas Y is flipped vs ROS world Y
+    }
+  }
+
+  socket.emit('set_initial_pose', {x: wx, y: wy, yaw});
+  closePoseModal();
+}, {passive: false});
+
+// ════════════════════════════════════════════════════════════════════
+// COVERAGE PLANNER MODAL
+// ════════════════════════════════════════════════════════════════════
+const PLANNER_COLORS = ['#E74C3C','#3498DB','#2ECC71','#F39C12','#9B59B6',
+  '#1ABC9C','#E67E22','#E91E63','#00BCD4','#8BC34A','#FF5722','#607D8B'];
+const MIN_ZONE_PX = 8;
+
+let _pl = {
+  tool:      'draw',   // 'draw' | 'pan'
+  mapName:   '',
+  mapImg:    null,
+  mapMeta:   null,     // {resolution, origin, width, height}
+  zoom:      1,
+  panX:      0,
+  panY:      0,
+  zones:     {},       // key → {key,x1,y1,x2,y2,robot_width,angle,rect_angle,color,waypoints:[]}
+  sequence:  [],
+  selKey:    null,
+  drawing:   false,
+  drawStart: null,     // {px,py} pixel coords
+  dragging:  false,
+  dragAnchor:null,
+  pinchAnchor:null,
+  ptrIds:    [],
+};
+let _plKeyCounter = 0;
+
+const plCanvas = document.getElementById('planner-canvas');
+const plCtx    = plCanvas.getContext('2d');
+
+function openPlanner() {
+  document.getElementById('planner-modal').classList.add('open');
+  _plResizeCanvas();
+  // Populate map dropdown
+  fetch('/api/maps').then(r=>r.json()).then(d => {
+    const dd = document.getElementById('planner-map-dd');
+    const prev = dd.value;
+    dd.innerHTML = '<option value="">— select map —</option>';
+    (d.maps||[]).forEach(m => {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = m;
+      if (m === (prev || _pl.mapName)) o.selected = true;
+      dd.appendChild(o);
+    });
+    if (!_pl.mapName && dd.value) plannerLoadMap(dd.value);
+  });
+}
+
+function closePlanner() {
+  document.getElementById('planner-modal').classList.remove('open');
+}
+
+function plannerOnMapChange() {
+  const name = document.getElementById('planner-map-dd').value;
+  if (name) plannerLoadMap(name);
+}
+
+function plannerLoadMap(name) {
+  if (!name) return;
+  _plSetStatus('Loading map…');
+  fetch(`/api/planner/map_data?name=${encodeURIComponent(name)}`)
+    .then(r=>r.json()).then(d => {
+      if (d.error) { _plSetStatus('Error: ' + d.error); return; }
+      _pl.mapName = name;
+      _pl.mapMeta = {resolution:d.resolution, origin:d.origin, width:d.width, height:d.height};
+      _pl.zones   = {};
+      _pl.sequence= [];
+      _pl.selKey  = null;
+      _plKeyCounter = 0;
+      const img = new Image();
+      img.onload = () => {
+        _pl.mapImg = img;
+        _plFit();
+        _plRenderZones();
+        _plSetStatus(`Loaded: ${name}  ${d.width}×${d.height}px  ${d.resolution}m/px`);
+        document.getElementById('planner-map-info').textContent =
+          `${d.width}×${d.height}px · ${d.resolution}m/px`;
+        _plRefreshSidebar();
+      };
+      img.src = 'data:image/png;base64,' + d.b64;
+    }).catch(e => _plSetStatus('Fetch error: ' + e));
+}
+
+function setPlannerTool(mode) {
+  _pl.tool = mode;
+  document.getElementById('pl-tool-draw').classList.toggle('active', mode==='draw');
+  document.getElementById('pl-tool-pan') .classList.toggle('active', mode==='pan');
+  plCanvas.style.cursor = mode === 'pan' ? 'grab' : 'crosshair';
+}
+
+// ── Resize ────────────────────────────────────────────────────────
+function _plResizeCanvas() {
+  const wrap = document.getElementById('planner-canvas-wrap');
+  plCanvas.width  = wrap.clientWidth  || window.innerWidth;
+  plCanvas.height = (wrap.clientHeight || window.innerHeight) - 40;
+}
+new ResizeObserver(() => {
+  if (document.getElementById('planner-modal').classList.contains('open')) {
+    _plResizeCanvas(); _plRenderZones();
+  }
+}).observe(document.getElementById('planner-canvas-wrap'));
+
+// ── Zoom / pan ────────────────────────────────────────────────────
+function _plApplyZoom(factor, cx, cy) {
+  const oldZ = _pl.zoom;
+  _pl.zoom   = Math.max(0.05, Math.min(16, _pl.zoom * factor));
+  if (cx != null) {
+    _pl.panX = cx - (cx - _pl.panX) * (_pl.zoom / oldZ);
+    _pl.panY = cy - (cy - _pl.panY) * (_pl.zoom / oldZ);
+  }
+  document.getElementById('pl-zoom-lbl').textContent = Math.round(_pl.zoom*100)+'%';
+  _plRenderZones();
+}
+
+function plannerZoom(factor) { _plApplyZoom(factor, plCanvas.width/2, plCanvas.height/2); }
+
+function plannerFit() {
+  if (!_pl.mapImg) return;
+  const cw = plCanvas.width, ch = plCanvas.height;
+  _pl.zoom = Math.min(cw/_pl.mapImg.width, ch/_pl.mapImg.height) * 0.96;
+  _pl.panX = (cw - _pl.mapImg.width  * _pl.zoom) / 2;
+  _pl.panY = (ch - _pl.mapImg.height * _pl.zoom) / 2;
+  document.getElementById('pl-zoom-lbl').textContent = Math.round(_pl.zoom*100)+'%';
+  _plRenderZones();
+}
+function _plFit() { plannerFit(); }
+
+// ── Coord helpers ─────────────────────────────────────────────────
+function _plCanvasToPx(cx, cy) {
+  return [(cx - _pl.panX) / _pl.zoom, (cy - _pl.panY) / _pl.zoom];
+}
+function _plPxToCanvas(px, py) {
+  return [px * _pl.zoom + _pl.panX, py * _pl.zoom + _pl.panY];
+}
+function _plPxToWorld(px, py) {
+  const m = _pl.mapMeta; if (!m) return [0,0];
+  return [m.origin[0]+px*m.resolution, m.origin[1]+(m.height-py)*m.resolution];
+}
+
+// ── Zone helpers ──────────────────────────────────────────────────
+function _plNextKey() {
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  for (const c of letters) if (!(c in _pl.zones)) return c;
+  for (const a of letters) for (const b of letters) {
+    const k = a+b; if (!(k in _pl.zones)) return k;
+  }
+  return 'z' + Object.keys(_pl.zones).length;
+}
+
+function _plZoneAt(px, py) {
+  for (const z of Object.values(_pl.zones).reverse()) {
+    const x1 = Math.min(z.x1,z.x2), x2 = Math.max(z.x1,z.x2);
+    const y1 = Math.min(z.y1,z.y2), y2 = Math.max(z.y1,z.y2);
+    // simplified AABB hit (rect_angle=0 approximation for click detection)
+    const cx = (z.x1+z.x2)/2, cy = (z.y1+z.y2)/2;
+    const hw  = Math.abs(z.x2-z.x1)/2, hh = Math.abs(z.y2-z.y1)/2;
+    const ra  = z.rect_angle * Math.PI / 180;
+    const dx  = px - cx, dy = py - cy;
+    const ca  = Math.cos(-ra), sa = Math.sin(-ra);
+    const lx  = dx*ca - dy*sa, ly = dx*sa + dy*ca;
+    if (Math.abs(lx) <= hw && Math.abs(ly) <= hh) return z;
+  }
+  return null;
+}
+
+function _plSelect(key) {
+  _pl.selKey = key;
+  _plRefreshSidebar();
+  _plRenderZones();
+}
+
+function plannerDeleteZone(key) {
+  delete _pl.zones[key];
+  _pl.sequence = _pl.sequence.filter(k => k !== key);
+  if (_pl.selKey === key) _pl.selKey = null;
+  _plRefreshSidebar();
+  _plRenderZones();
+}
+
+function plannerClearAll() {
+  if (!Object.keys(_pl.zones).length) return;
+  if (!confirm('Delete all zones?')) return;
+  _pl.zones = {}; _pl.sequence = []; _pl.selKey = null;
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────
+function _plRefreshSidebar() {
+  const list = document.getElementById('planner-zone-list');
+  const keys = _pl.sequence.filter(k => k in _pl.zones);
+  if (!keys.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--dim)">No zones yet</div>';
+  } else {
+    list.innerHTML = '';
+    keys.forEach(key => {
+      const z   = _pl.zones[key];
+      const pts = z.waypoints.filter(w=>w.type==='coverage').length;
+      const card = document.createElement('div');
+      card.className = 'pz-card' + (key===_pl.selKey?' selected':'');
+      card.innerHTML = `
+        <div class="pz-swatch" style="background:${z.color}"></div>
+        <span class="pz-name">${key.toUpperCase()}</span>
+        <span class="pz-pts">${pts ? pts+' pts' : 'no path'}</span>
+        <button class="pz-del" onclick="plannerDeleteZone('${key}');event.stopPropagation()">×</button>`;
+      card.onclick = () => _plSelect(key);
+      list.appendChild(card);
+    });
+  }
+
+  const propsEl = document.getElementById('planner-props');
+  if (_pl.selKey && _pl.zones[_pl.selKey]) {
+    propsEl.style.display = '';
+    const z = _pl.zones[_pl.selKey];
+    document.getElementById('prop-key-lbl').textContent = _pl.selKey.toUpperCase();
+    document.getElementById('prop-rw').value          = z.robot_width.toFixed(2);
+    document.getElementById('prop-angle').value       = z.angle.toFixed(1);
+    document.getElementById('prop-angle-slider').value= z.angle;
+    document.getElementById('prop-rect-angle').value  = z.rect_angle.toFixed(1);
+    const pts = z.waypoints.filter(w=>w.type==='coverage').length;
+    const len = _plPathLen(z.waypoints);
+    document.getElementById('prop-path-info').textContent =
+      pts ? `Path: ${len.toFixed(1)} m · ${pts} coverage pts` : 'No path generated yet';
+  } else {
+    propsEl.style.display = 'none';
+  }
+}
+
+function _plPathLen(wps) {
+  let t = 0;
+  for (let i = 1; i < wps.length; i++) {
+    t += Math.hypot(wps[i].x-wps[i-1].x, wps[i].y-wps[i-1].y);
+  }
+  return t;
+}
+
+function plannerPropChange() {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) return;
+  const z = _pl.zones[_pl.selKey];
+  z.robot_width = Math.max(0.05, parseFloat(document.getElementById('prop-rw').value)||0.30);
+  z.rect_angle  = (parseFloat(document.getElementById('prop-rect-angle').value)||0) % 360;
+  z.waypoints   = [];
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+function plannerAngleSync() {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) return;
+  const v = parseFloat(document.getElementById('prop-angle').value) || 0;
+  _pl.zones[_pl.selKey].angle = v % 360;
+  document.getElementById('prop-angle-slider').value = v % 180;
+  _pl.zones[_pl.selKey].waypoints = [];
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+function plannerAngleSlider() {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) return;
+  const v = parseFloat(document.getElementById('prop-angle-slider').value) || 0;
+  _pl.zones[_pl.selKey].angle = v;
+  document.getElementById('prop-angle').value = v.toFixed(1);
+  _pl.zones[_pl.selKey].waypoints = [];
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+function plannerRotateRect(delta) {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) return;
+  const z = _pl.zones[_pl.selKey];
+  z.rect_angle = ((z.rect_angle + delta) % 360 + 360) % 360;
+  document.getElementById('prop-rect-angle').value = z.rect_angle.toFixed(1);
+  z.waypoints = [];
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+// ── Generate paths ────────────────────────────────────────────────
+function plannerGenerateAll() {
+  const keys = Object.keys(_pl.zones);
+  if (!keys.length) { toast('No zones to generate paths for'); return; }
+  if (!_pl.mapName) { toast('No map loaded'); return; }
+  _plSetStatus('Generating paths…');
+  const zonesPayload = {};
+  keys.forEach(k => {
+    const z = _pl.zones[k];
+    zonesPayload[k] = {x1:z.x1,y1:z.y1,x2:z.x2,y2:z.y2,
+      robot_width:z.robot_width, angle:z.angle, rect_angle:z.rect_angle};
+  });
+  fetch('/api/planner/generate', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({map_name:_pl.mapName, zones:zonesPayload})
+  }).then(r=>r.json()).then(d => {
+    if (d.error) { _plSetStatus('Error: '+d.error); return; }
+    let total = 0;
+    Object.entries(d.waypoints).forEach(([k,wps]) => {
+      if (_pl.zones[k]) { _pl.zones[k].waypoints = wps; total += wps.length; }
+    });
+    _plRefreshSidebar(); _plRenderZones();
+    _plSetStatus(`Generated ${total} waypoints across ${keys.length} zones`);
+  }).catch(e => _plSetStatus('Error: '+e));
+}
+
+function plannerGenerateSelected() {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) {
+    toast('Select a zone first'); return;
+  }
+  const z = _pl.zones[_pl.selKey];
+  const payload = {x1:z.x1,y1:z.y1,x2:z.x2,y2:z.y2,
+    robot_width:z.robot_width, angle:z.angle, rect_angle:z.rect_angle};
+  fetch('/api/planner/generate', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({map_name:_pl.mapName, zones:{[_pl.selKey]:payload}})
+  }).then(r=>r.json()).then(d => {
+    if (d.error) { toast('Error: '+d.error); return; }
+    const wps = d.waypoints[_pl.selKey] || [];
+    _pl.zones[_pl.selKey].waypoints = wps;
+    _plRefreshSidebar(); _plRenderZones();
+  });
+}
+
+// ── Save plan ─────────────────────────────────────────────────────
+function plannerSave() {
+  if (!_pl.mapName) { toast('No map loaded'); return; }
+  const allHavePaths = _pl.sequence.every(k => _pl.zones[k]?.waypoints?.length);
+  if (!allHavePaths) {
+    if (!confirm('Some zones have no paths. Save anyway?')) return;
+  }
+  const m  = _pl.mapMeta || {};
+  const plan = {
+    version: '1.0', tool: 'coverage_path_planner_hmi',
+    map: {
+      pgm_file:   _pl.mapName + '.pgm',
+      yaml_file:  _pl.mapName + '.yaml',
+      resolution: m.resolution || 0.05,
+      origin:     m.origin || [0,0,0],
+      width_px:   m.width  || 0,
+      height_px:  m.height || 0,
+    },
+    sequence: _pl.sequence.filter(k => k in _pl.zones),
+    zones: {},
+  };
+  _pl.sequence.forEach(k => {
+    const z = _pl.zones[k]; if (!z) return;
+    const x1 = Math.min(z.x1,z.x2), x2 = Math.max(z.x1,z.x2);
+    const y1 = Math.min(z.y1,z.y2), y2 = Math.max(z.y1,z.y2);
+    const res = m.resolution || 0.05;
+    plan.zones[k] = {
+      key: k,
+      pixel_bounds: {x1,y1,x2,y2},
+      world_bounds: {
+        x_min: m.origin[0]+x1*res, y_min: m.origin[1]+(m.height-y2)*res,
+        x_max: m.origin[0]+x2*res, y_max: m.origin[1]+(m.height-y1)*res,
+      },
+      dimensions_m: {
+        width:  parseFloat(((x2-x1)*res).toFixed(3)),
+        height: parseFloat(((y2-y1)*res).toFixed(3)),
+      },
+      path_type:       'boustrophedon',
+      robot_width_m:   z.robot_width,
+      angle_deg:       z.angle,
+      rect_angle_deg:  z.rect_angle,
+      color:           z.color,
+      waypoints:       z.waypoints,
+    };
+  });
+  fetch('/api/planner/save', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({map_name:_pl.mapName, plan})
+  }).then(r=>r.json()).then(d => {
+    if (d.error) { toast('Save error: '+d.error); return; }
+    toast(`✓ Plan saved → paths/${_pl.mapName}.json`);
+    _plSetStatus(`Saved: paths/${_pl.mapName}.json`);
+  }).catch(e => toast('Save error: '+e));
+}
+
+// ── Canvas rendering ──────────────────────────────────────────────
+function _plRenderZones() {
+  const w = plCanvas.width, h = plCanvas.height;
+  plCtx.clearRect(0, 0, w, h);
+
+  // Background
+  plCtx.fillStyle = '#111';
+  plCtx.fillRect(0, 0, w, h);
+
+  // Map image
+  if (_pl.mapImg) {
+    plCtx.drawImage(_pl.mapImg, _pl.panX, _pl.panY,
+                    _pl.mapImg.width * _pl.zoom, _pl.mapImg.height * _pl.zoom);
+  }
+
+  // Zones + paths
+  for (const z of Object.values(_pl.zones)) {
+    _plDrawZone(z);
+    if (z.waypoints.length) _plDrawPath(z);
+  }
+
+  // Rubber band while drawing
+  if (_pl.drawing && _pl.drawStart && _pl._drawCurrent) {
+    const [cx1, cy1] = _plPxToCanvas(_pl.drawStart[0], _pl.drawStart[1]);
+    const [cx2, cy2] = _plPxToCanvas(_pl._drawCurrent[0], _pl._drawCurrent[1]);
+    plCtx.strokeStyle = '#fff';
+    plCtx.lineWidth   = 1.5;
+    plCtx.setLineDash([4, 4]);
+    plCtx.strokeRect(cx1, cy1, cx2-cx1, cy2-cy1);
+    plCtx.setLineDash([]);
+  }
+}
+
+function _plDrawZone(z) {
+  const x1 = Math.min(z.x1,z.x2), x2 = Math.max(z.x1,z.x2);
+  const y1 = Math.min(z.y1,z.y2), y2 = Math.max(z.y1,z.y2);
+  const ra  = z.rect_angle * Math.PI / 180;
+  const cx  = (x1+x2)/2, cy = (y1+y2)/2;
+  const hw  = (x2-x1)/2, hh = (y2-y1)/2;
+  const ca  = Math.cos(ra), sa = Math.sin(ra);
+  const corners = [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([dx,dy]) => {
+    const rx = cx + dx*ca - dy*sa, ry = cy + dx*sa + dy*ca;
+    return _plPxToCanvas(rx, ry);
+  });
+
+  const isSel = z.key === _pl.selKey;
+  plCtx.beginPath();
+  plCtx.moveTo(corners[0][0], corners[0][1]);
+  for (let i = 1; i < 4; i++) plCtx.lineTo(corners[i][0], corners[i][1]);
+  plCtx.closePath();
+  plCtx.fillStyle   = z.color + '33';
+  plCtx.fill();
+  plCtx.strokeStyle = isSel ? '#fff' : z.color;
+  plCtx.lineWidth   = isSel ? 2.5 : 1.5;
+  plCtx.stroke();
+
+  // Label
+  const fs = Math.max(9, Math.min(20, Math.round(14 * _pl.zoom)));
+  plCtx.font      = `700 ${fs}px sans-serif`;
+  plCtx.shadowColor='#000'; plCtx.shadowBlur=3;
+  plCtx.fillStyle = '#fff';
+  plCtx.fillText(z.key.toUpperCase(), corners[0][0]+3, corners[0][1]+fs+2);
+  plCtx.shadowBlur = 0;
+}
+
+function _plDrawPath(z) {
+  if (!_pl.mapMeta) return;
+  const m = _pl.mapMeta;
+  const toCvs = (wx, wy) => {
+    const px = (wx - m.origin[0]) / m.resolution;
+    const py = m.height - (wy - m.origin[1]) / m.resolution;
+    return _plPxToCanvas(px, py);
+  };
+
+  const dotR = Math.max(2, 2.5 * _pl.zoom);
+
+  // Lines (group by stripe)
+  for (let i = 0; i < z.waypoints.length-1; i++) {
+    const a = z.waypoints[i], b = z.waypoints[i+1];
+    const [ax,ay] = toCvs(a.x,a.y), [bx,by] = toCvs(b.x,b.y);
+    plCtx.beginPath();
+    plCtx.moveTo(ax,ay); plCtx.lineTo(bx,by);
+    if (a.stripe===b.stripe && a.type!=='transition' && b.type!=='transition') {
+      plCtx.strokeStyle = z.color; plCtx.lineWidth = Math.max(1.5, 2*_pl.zoom);
+      plCtx.setLineDash([]);
+    } else {
+      plCtx.strokeStyle = z.color+'88'; plCtx.lineWidth = 1;
+      plCtx.setLineDash([4,4]);
+    }
+    plCtx.stroke();
+    plCtx.setLineDash([]);
+  }
+
+  // Dots
+  z.waypoints.forEach((wp,i) => {
+    if (wp.type==='transition') return;
+    const [cx2,cy2] = toCvs(wp.x,wp.y);
+    plCtx.beginPath();
+    plCtx.arc(cx2,cy2, i===0 ? dotR+2 : dotR, 0, Math.PI*2);
+    plCtx.fillStyle   = i===0 ? '#fff' : z.color;
+    plCtx.fill();
+    if (i===0) { plCtx.strokeStyle=z.color; plCtx.lineWidth=2; plCtx.stroke(); }
+  });
+}
+
+function _plSetStatus(msg) {
+  document.getElementById('planner-status').textContent = msg;
+}
+
+// ── Mouse / Touch events ──────────────────────────────────────────
+plCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = plCanvas.getBoundingClientRect();
+  _plApplyZoom(e.deltaY < 0 ? 1.12 : 1/1.12, e.clientX-r.left, e.clientY-r.top);
+}, {passive:false});
+
+plCanvas.addEventListener('mousedown', e => {
+  e.preventDefault();
+  const r  = plCanvas.getBoundingClientRect();
+  const cx = e.clientX-r.left, cy = e.clientY-r.top;
+  const [px,py] = _plCanvasToPx(cx,cy);
+
+  if (_pl.tool === 'pan' || e.button === 1) {
+    _pl.dragging   = true;
+    _pl.dragAnchor = {mx:cx, my:cy, px:_pl.panX, py:_pl.panY};
+    plCanvas.style.cursor = 'grabbing';
+    return;
+  }
+
+  // Draw tool — check if clicking existing zone
+  if (!_pl.mapImg) return;
+  const hit = _plZoneAt(px, py);
+  if (hit) { _plSelect(hit.key); return; }
+
+  // Start drawing new zone
+  _pl.drawing    = true;
+  _pl.drawStart  = [px, py];
+  _pl._drawCurrent = [px, py];
+  _plSelect(null);
+});
+
+plCanvas.addEventListener('mousemove', e => {
+  const r  = plCanvas.getBoundingClientRect();
+  const cx = e.clientX-r.left, cy = e.clientY-r.top;
+
+  if (_pl.dragging && _pl.dragAnchor) {
+    _pl.panX = _pl.dragAnchor.px + cx - _pl.dragAnchor.mx;
+    _pl.panY = _pl.dragAnchor.py + cy - _pl.dragAnchor.my;
+    _plRenderZones(); return;
+  }
+  if (_pl.drawing && _pl.drawStart) {
+    _pl._drawCurrent = _plCanvasToPx(cx, cy);
+    _plRenderZones();
+    // Show cursor position
+    if (_pl.mapMeta) {
+      const [wx,wy] = _plPxToWorld(..._pl._drawCurrent);
+      const w = Math.abs(_pl._drawCurrent[0]-_pl.drawStart[0])*_pl.mapMeta.resolution;
+      const h = Math.abs(_pl._drawCurrent[1]-_pl.drawStart[1])*_pl.mapMeta.resolution;
+      _plSetStatus(`Drawing: ${w.toFixed(2)}×${h.toFixed(2)} m`);
+    }
+  }
+});
+
+plCanvas.addEventListener('mouseup', e => {
+  if (_pl.dragging) {
+    _pl.dragging = false; _pl.dragAnchor = null;
+    plCanvas.style.cursor = _pl.tool==='pan' ? 'grab' : 'crosshair';
+    return;
+  }
+  if (!_pl.drawing || !_pl.drawStart) return;
+  _pl.drawing = false;
+
+  const r  = plCanvas.getBoundingClientRect();
+  const cx = e.clientX-r.left, cy = e.clientY-r.top;
+  const [ex,ey] = _plCanvasToPx(cx,cy);
+  const [sx,sy] = _pl.drawStart;
+  _pl.drawStart = null;
+
+  // Too small
+  if (Math.abs(ex-sx)*_pl.zoom < MIN_ZONE_PX || Math.abs(ey-sy)*_pl.zoom < MIN_ZONE_PX) {
+    _plSetStatus('Zone too small — try dragging a larger rectangle');
+    _plRenderZones(); return;
+  }
+
+  const key   = _plNextKey();
+  const color = PLANNER_COLORS[Object.keys(_pl.zones).length % PLANNER_COLORS.length];
+  const w_m   = Math.abs(ex-sx) * (_pl.mapMeta?.resolution || 0.05);
+  const h_m   = Math.abs(ey-sy) * (_pl.mapMeta?.resolution || 0.05);
+  _pl.zones[key] = {
+    key, x1:sx, y1:sy, x2:ex, y2:ey,
+    robot_width: 0.30,
+    angle:       w_m >= h_m ? 0 : 90,
+    rect_angle:  0,
+    color,
+    waypoints:   [],
+  };
+  _pl.sequence.push(key);
+  _plSelect(key);
+  _plSetStatus(`Zone '${key}' — ${w_m.toFixed(2)}×${h_m.toFixed(2)} m · ${Math.ceil(Math.min(w_m,h_m)/0.30)} stripes`);
+  _plRenderZones();
+});
+
+plCanvas.addEventListener('mouseleave', () => {
+  if (_pl.dragging) { _pl.dragging = false; _pl.dragAnchor = null; }
+  if (_pl.drawing)  { _pl.drawing  = false; _pl.drawStart  = null; _plRenderZones(); }
+});
+
+// Touch events
+plCanvas.addEventListener('touchstart', _plTouchStart, {passive:false});
+plCanvas.addEventListener('touchmove',  _plTouchMove,  {passive:false});
+plCanvas.addEventListener('touchend',   _plTouchEnd,   {passive:false});
+
+function _plTouchXY(t) {
+  const r = plCanvas.getBoundingClientRect();
+  return [t.clientX-r.left, t.clientY-r.top];
+}
+function _plTouchStart(e) {
+  e.preventDefault();
+  if (e.touches.length === 2) {
+    const [ax,ay] = _plTouchXY(e.touches[0]);
+    const [bx,by] = _plTouchXY(e.touches[1]);
+    _pl.pinchAnchor = {
+      dist: Math.hypot(bx-ax,by-ay), zoom:_pl.zoom,
+      midX:(ax+bx)/2, midY:(ay+by)/2,
+    };
+    _pl.drawing = false; _pl.dragging = false;
+    return;
+  }
+  if (e.touches.length === 1) {
+    _pl.pinchAnchor = null;
+    const [cx,cy] = _plTouchXY(e.touches[0]);
+    const [px,py] = _plCanvasToPx(cx,cy);
+    if (_pl.tool === 'pan') {
+      _pl.dragging   = true;
+      _pl.dragAnchor = {mx:cx,my:cy,px:_pl.panX,py:_pl.panY};
+    } else {
+      const hit = _plZoneAt(px,py);
+      if (hit) { _plSelect(hit.key); return; }
+      if (_pl.mapImg) {
+        _pl.drawing = true; _pl.drawStart = [px,py]; _pl._drawCurrent=[px,py];
+        _plSelect(null);
+      }
+    }
+  }
+}
+function _plTouchMove(e) {
+  e.preventDefault();
+  if (e.touches.length === 2 && _pl.pinchAnchor) {
+    const [ax,ay] = _plTouchXY(e.touches[0]);
+    const [bx,by] = _plTouchXY(e.touches[1]);
+    const dist = Math.hypot(bx-ax,by-ay);
+    const factor = dist / _pl.pinchAnchor.dist;
+    const newZ = Math.max(0.05, Math.min(16, _pl.pinchAnchor.zoom * factor));
+    const oldZ = _pl.zoom; _pl.zoom = newZ;
+    _pl.panX = _pl.pinchAnchor.midX - (_pl.pinchAnchor.midX-_pl.panX)*(newZ/oldZ);
+    _pl.panY = _pl.pinchAnchor.midY - (_pl.pinchAnchor.midY-_pl.panY)*(newZ/oldZ);
+    document.getElementById('pl-zoom-lbl').textContent = Math.round(_pl.zoom*100)+'%';
+    _plRenderZones(); return;
+  }
+  if (e.touches.length === 1) {
+    const [cx,cy] = _plTouchXY(e.touches[0]);
+    if (_pl.dragging && _pl.dragAnchor) {
+      _pl.panX = _pl.dragAnchor.px + cx - _pl.dragAnchor.mx;
+      _pl.panY = _pl.dragAnchor.py + cy - _pl.dragAnchor.my;
+      _plRenderZones();
+    } else if (_pl.drawing) {
+      _pl._drawCurrent = _plCanvasToPx(cx,cy);
+      _plRenderZones();
+    }
+  }
+}
+function _plTouchEnd(e) {
+  e.preventDefault();
+  if (e.touches.length === 0) {
+    if (_pl.dragging) { _pl.dragging=false; _pl.dragAnchor=null; }
+    if (_pl.drawing && _pl.drawStart && _pl._drawCurrent) {
+      const [ex,ey] = _pl._drawCurrent;
+      const [sx,sy] = _pl.drawStart;
+      _pl.drawing = false; _pl.drawStart = null;
+      if (Math.abs(ex-sx)*_pl.zoom >= MIN_ZONE_PX && Math.abs(ey-sy)*_pl.zoom >= MIN_ZONE_PX) {
+        const key   = _plNextKey();
+        const color = PLANNER_COLORS[Object.keys(_pl.zones).length % PLANNER_COLORS.length];
+        const res   = _pl.mapMeta?.resolution || 0.05;
+        const w_m   = Math.abs(ex-sx)*res, h_m = Math.abs(ey-sy)*res;
+        _pl.zones[key] = {key,x1:sx,y1:sy,x2:ex,y2:ey,robot_width:0.30,
+          angle:w_m>=h_m?0:90,rect_angle:0,color,waypoints:[]};
+        _pl.sequence.push(key);
+        _plSelect(key);
+        _plSetStatus(`Zone '${key}' — ${w_m.toFixed(2)}×${h_m.toFixed(2)} m`);
+      }
+      _plRenderZones();
+    }
+    _pl.pinchAnchor = null;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// BOOT
+// ════════════════════════════════════════════════════════════════════
+window.addEventListener('load', init);
+</script>
+</body>
+</html>
