@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Flask-SocketIO with threading mode — compatible with rclpy (native C++ threads)
+_ASYNC_MODE = "threading"
+
 """
 Coverage HMI Web Server
 =======================
@@ -24,13 +27,13 @@ ROS2 topics subscribed:
     /map                nav_msgs/OccupancyGrid  live SLAM map
 """
 
-import os, sys, json, threading, base64, io, argparse, socket as _socket
+import os, sys, json, threading, base64, io, argparse, socket as _socket, signal as _signal, math as _math
 import subprocess as _subprocess
 from pathlib import Path
 from typing import Any, Dict, List
 
 try:
-    from flask import Flask, render_template, jsonify
+    from flask import Flask, render_template, jsonify, request
     from flask_socketio import SocketIO, emit
 except ImportError:
     sys.exit("pip install flask flask-socketio")
@@ -79,7 +82,7 @@ def _get_template_folder():
 # ── Flask / SocketIO ──────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder=_get_template_folder())
 app.config["SECRET_KEY"] = "cov_hmi_key"
-sio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+sio = SocketIO(app, cors_allowed_origins="*", async_mode=_ASYNC_MODE)
 
 # ── Shared state (guarded by _lock) ──────────────────────────────────────────
 _lock = threading.Lock()
@@ -96,24 +99,51 @@ _st: Dict[str, Any] = {
     "ros_connected": False,
     "live_map_b64":  "",      # latest OccupancyGrid as PNG base64
 }
-_plan_dir  = "."
-_maps_dir  = "."   # resolved at startup to cus_nav2_config/maps/ if available
+_plan_dir          = "."
+_maps_dir          = "."   # resolved at startup to cus_nav2_config/maps/ (source)
+_paths_dir         = "."   # resolved at startup to cus_nav2_config/paths/ (source)
+_selected_map      = ""    # stem of the currently selected map, e.g. "map123"
+_selected_plan_file = ""   # absolute path to the selected .json plan
 _ros_node  = None
 _use_stamped = False  # set by main() before starting ROS thread
 _sim_mode    = False  # toggled by UI sim checkbox
 _procs: Dict[str, Any] = {}  # tracked child subprocesses
 
 
-def _resolve_maps_dir() -> str:
-    """Return the maps/ directory of cus_nav2_config if the package is installed."""
+def _find_src_pkg_dir(pkg_name: str) -> str:
+    """Locate a package's source directory by walking up from the install share path."""
     try:
         from ament_index_python.packages import get_package_share_directory
-        pkg = get_package_share_directory('cus_nav2_config')
-        d = os.path.join(pkg, 'maps')
-        os.makedirs(d, exist_ok=True)
-        return d
+        share = Path(get_package_share_directory(pkg_name))
+        # share = <ws>/install/<pkg>/share/<pkg>  →  4 levels up = workspace root
+        ws = share.parent.parent.parent.parent
+        src = ws / 'src'
+        if src.exists():
+            for pkg_xml in src.rglob('package.xml'):
+                if pkg_xml.parent.name == pkg_name:
+                    return str(pkg_xml.parent)
     except Exception:
         pass
+    return ""
+
+
+def _resolve_maps_dir() -> str:
+    """Return the source maps/ directory of cus_nav2_config."""
+    d = _find_src_pkg_dir('cus_nav2_config')
+    if d:
+        maps = os.path.join(d, 'maps')
+        os.makedirs(maps, exist_ok=True)
+        return maps
+    return "."
+
+
+def _resolve_paths_dir() -> str:
+    """Return the source paths/ directory of cus_nav2_config."""
+    d = _find_src_pkg_dir('cus_nav2_config')
+    if d:
+        paths = os.path.join(d, 'paths')
+        os.makedirs(paths, exist_ok=True)
+        return paths
     return "."
 
 
@@ -193,25 +223,21 @@ def load_plan(path: str) -> bool:
 
 
 def _map_image_b64() -> str:
-    """Read the map PGM referenced by the plan and return a PNG as base64."""
-    with _lock:
-        pgm = _st["plan"].get("map", {}).get("pgm_file", "map.pgm")
-
-    # Only look in cus_nav2_config/maps/
+    """Return the selected map's PGM as a PNG base64 string."""
+    import glob as _glob
     candidates = []
-    try:
-        from ament_index_python.packages import get_package_share_directory
-        pkg_maps = os.path.join(get_package_share_directory('cus_nav2_config'), 'maps')
-        candidates.append(os.path.join(pkg_maps, os.path.basename(pgm)))
-        import glob as _glob
-        candidates.extend(_glob.glob(os.path.join(pkg_maps, '*.pgm')))
-    except Exception:
-        pass
 
-    for candidate in candidates:
-        if os.path.exists(candidate):
+    # Prefer the explicitly selected map
+    if _selected_map:
+        candidates.append(os.path.join(_maps_dir, _selected_map + '.pgm'))
+
+    # Fallback: any pgm in maps dir
+    candidates.extend(sorted(_glob.glob(os.path.join(_maps_dir, '*.pgm'))))
+
+    for pgm in candidates:
+        if os.path.exists(pgm):
             try:
-                img = Image.open(candidate).convert("RGB")
+                img = Image.open(pgm).convert("RGB")
                 buf = io.BytesIO()
                 img.save(buf, "PNG")
                 return base64.b64encode(buf.getvalue()).decode()
@@ -229,7 +255,8 @@ def _start_ros_node(name: str, cmd: List[str]) -> bool:
     try:
         p = _subprocess.Popen(cmd,
                               stdout=_subprocess.DEVNULL,
-                              stderr=_subprocess.DEVNULL)
+                              stderr=_subprocess.DEVNULL,
+                              start_new_session=True)
         _procs[name] = p
         print(f"[hmi] Started '{name}': {' '.join(cmd)}")
         return True
@@ -239,15 +266,20 @@ def _start_ros_node(name: str, cmd: List[str]) -> bool:
 
 
 def _stop_ros_node(name: str) -> bool:
-    """Terminate a tracked subprocess."""
+    """Terminate a tracked subprocess and its entire process group."""
     p = _procs.pop(name, None)
     if not p:
         return False
     try:
-        p.terminate()
-        p.wait(timeout=3)
+        os.killpg(os.getpgid(p.pid), _signal.SIGTERM)
+        p.wait(timeout=1)
+    except (ProcessLookupError, PermissionError):
+        pass
     except _subprocess.TimeoutExpired:
-        p.kill()
+        try:
+            os.killpg(os.getpgid(p.pid), _signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
     print(f"[hmi] Stopped '{name}'")
     return True
 
@@ -273,7 +305,9 @@ if HAS_ROS2:
             _start_qos = QoSProfile(depth=1)
             _start_qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
             _start_qos.reliability = ReliabilityPolicy.RELIABLE
-            self._pub_start  = self.create_publisher(Bool, "/coverage_start", _start_qos)
+            self._pub_start      = self.create_publisher(Bool, "/coverage_start", _start_qos)
+            self._pub_init_pose  = self.create_publisher(
+                PoseWithCovarianceStamped, "/initialpose", 10)
             if use_stamped:
                 self._pub_cmdvel = self.create_publisher(TwistStamped, "/cmd_vel", 10)
                 self.get_logger().info("HMI cmd_vel publisher using TwistStamped")
@@ -366,6 +400,19 @@ if HAS_ROS2:
         def pub_seq(self, seq: List[str]):
             self._pub_seq.publish(String(data=json.dumps(seq)))
 
+        def pub_initial_pose(self, x: float, y: float, yaw: float):
+            msg = PoseWithCovarianceStamped()
+            msg.header.stamp    = self.get_clock().now().to_msg()
+            msg.header.frame_id = 'map'
+            msg.pose.pose.position.x    = x
+            msg.pose.pose.position.y    = y
+            msg.pose.pose.orientation.z = _math.sin(yaw / 2.0)
+            msg.pose.pose.orientation.w = _math.cos(yaw / 2.0)
+            msg.pose.covariance[0]  = 0.25   # x
+            msg.pose.covariance[7]  = 0.25   # y
+            msg.pose.covariance[35] = 0.07   # yaw
+            self._pub_init_pose.publish(msg)
+
         def pub_cmdvel(self, linear_x: float, angular_z: float):
             if self._use_stamped:
                 msg = TwistStamped()
@@ -424,6 +471,175 @@ def api_state():
 @app.route("/api/node_status")
 def api_node_status():
     return jsonify(_node_status())
+
+
+@app.route("/api/maps")
+def api_maps():
+    """List available maps (stems that have both a .yaml and a .pgm file)."""
+    import glob as _glob
+    yamls = sorted(_glob.glob(os.path.join(_maps_dir, '*.yaml')))
+    maps = []
+    for y in yamls:
+        stem = Path(y).stem
+        if os.path.exists(os.path.join(_maps_dir, stem + '.pgm')):
+            maps.append(stem)
+    return jsonify({"maps": maps, "selected": _selected_map})
+
+
+# ── Coverage Planner backend ──────────────────────────────────────────────────
+
+class _PlannerMapInfo:
+    """Minimal port of MapInfo from coverage_planner.py (no Tkinter)."""
+    def __init__(self, resolution, origin, width, height):
+        self.resolution = resolution
+        self.origin     = origin
+        self.width      = width
+        self.height     = height
+
+    def pixel_to_world(self, px, py):
+        wx = self.origin[0] + px * self.resolution
+        wy = self.origin[1] + (self.height - py) * self.resolution
+        return round(wx, 4), round(wy, 4)
+
+
+def _planner_boustrophedon(zone: dict, mi: _PlannerMapInfo):
+    """Boustrophedon path generation (ported from coverage_planner.py)."""
+    import math as _m
+    x1, y1, x2, y2 = float(zone['x1']), float(zone['y1']), float(zone['x2']), float(zone['y2'])
+    robot_width = max(float(zone.get('robot_width', 0.30)), 0.01)
+    angle_deg   = float(zone.get('angle',      0.0))
+    rect_angle  = float(zone.get('rect_angle', 0.0))
+
+    # 4 corners of (possibly rotated) rectangle in pixel space
+    cx_p = (x1 + x2) / 2.0
+    cy_p = (y1 + y2) / 2.0
+    hw   = abs(x2 - x1) / 2.0
+    hh   = abs(y2 - y1) / 2.0
+    a    = _m.radians(rect_angle)
+    ca, sa = _m.cos(a), _m.sin(a)
+    corners_px = [(cx_p + dx * ca - dy * sa, cy_p + dx * sa + dy * ca)
+                  for dx, dy in [(-hw,-hh),(hw,-hh),(hw,hh),(-hw,hh)]]
+    corners_w  = [mi.pixel_to_world(px, py) for px, py in corners_px]
+
+    a2 = _m.radians(angle_deg)
+    ca2, sa2 = _m.cos(a2), _m.sin(a2)
+    def to_local(x, y):  return  x*ca2 + y*sa2, -x*sa2 + y*ca2
+    def to_world(lx, ly): return lx*ca2 - ly*sa2,  lx*sa2 + ly*ca2
+
+    lc     = [to_local(x, y) for x, y in corners_w]
+    ly_min = min(p[1] for p in lc)
+    ly_max = max(p[1] for p in lc)
+
+    def clip(sy):
+        xs = []
+        n  = len(lc)
+        for i in range(n):
+            x1c, y1c = lc[i];  x2c, y2c = lc[(i+1)%n]
+            if abs(y2c - y1c) < 1e-10: continue
+            if min(y1c,y2c)-1e-9 <= sy <= max(y1c,y2c)+1e-9:
+                xs.append(x1c + (sy-y1c)/(y2c-y1c)*(x2c-x1c))
+        return (min(xs), max(xs)) if len(xs) >= 2 else None
+
+    stripe_ys, y_s = [], ly_min + robot_width/2
+    while y_s <= ly_max + 1e-9:
+        stripe_ys.append(y_s); y_s += robot_width
+    if not stripe_ys:
+        stripe_ys = [(ly_min+ly_max)/2]
+
+    waypoints = []
+    prev_wx = prev_wy = None
+    for i, sy in enumerate(stripe_ys):
+        xr = clip(sy)
+        if xr is None: continue
+        lx_lo, lx_hi = xr
+        lx_s, lx_e = (lx_lo,lx_hi) if i%2==0 else (lx_hi,lx_lo)
+        wx1, wy1 = to_world(lx_s, sy)
+        wx2, wy2 = to_world(lx_e, sy)
+        heading  = _m.atan2(wy2-wy1, wx2-wx1)
+        if prev_wx is not None and (prev_wx!=wx1 or prev_wy!=wy1):
+            th = _m.atan2(wy1-prev_wy, wx1-prev_wx)
+            waypoints.append({'x':round(wx1,4),'y':round(wy1,4),'yaw':round(th,4),
+                              'stripe':i,'type':'transition'})
+        waypoints.append({'x':round(wx1,4),'y':round(wy1,4),'yaw':round(heading,4),
+                         'stripe':i,'type':'coverage'})
+        waypoints.append({'x':round(wx2,4),'y':round(wy2,4),'yaw':round(heading,4),
+                         'stripe':i,'type':'coverage'})
+        prev_wx, prev_wy = wx2, wy2
+    return waypoints
+
+
+@app.route("/api/planner/map_data")
+def api_planner_map_data():
+    """Return base64 map image + metadata for planner."""
+    name = request.args.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    pgm  = os.path.join(_maps_dir, name + '.pgm')
+    yaml_path = os.path.join(_maps_dir, name + '.yaml')
+    if not os.path.exists(pgm) or not os.path.exists(yaml_path):
+        return jsonify({"error": "Map not found"}), 404
+    try:
+        import yaml as _yaml
+        with open(yaml_path) as f:
+            y = _yaml.safe_load(f)
+        img = Image.open(pgm).convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        return jsonify({
+            "name":       name,
+            "b64":        base64.b64encode(buf.getvalue()).decode(),
+            "resolution": float(y.get("resolution", 0.05)),
+            "origin":     list(y.get("origin", [0.0, 0.0, 0.0])),
+            "width":      img.width,
+            "height":     img.height,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/planner/generate", methods=["POST"])
+def api_planner_generate():
+    """Generate boustrophedon waypoints for a set of zones on a map."""
+    data     = request.get_json(force=True) or {}
+    map_name = data.get("map_name", "")
+    zones    = data.get("zones", {})
+    yaml_path = os.path.join(_maps_dir, map_name + '.yaml')
+    pgm_path  = os.path.join(_maps_dir, map_name + '.pgm')
+    if not os.path.exists(yaml_path):
+        return jsonify({"error": "Map YAML not found"}), 404
+    try:
+        import yaml as _yaml
+        with open(yaml_path) as f:
+            y = _yaml.safe_load(f)
+        img = Image.open(pgm_path)
+        mi  = _PlannerMapInfo(
+            resolution=float(y.get("resolution", 0.05)),
+            origin=list(y.get("origin", [0.0, 0.0, 0.0])),
+            width=img.width, height=img.height,
+        )
+        result = {key: _planner_boustrophedon(z, mi) for key, z in zones.items()}
+        return jsonify({"waypoints": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/planner/save", methods=["POST"])
+def api_planner_save():
+    """Save coverage plan JSON to paths/<map_name>.json."""
+    data     = request.get_json(force=True) or {}
+    map_name = data.get("map_name", "")
+    plan     = data.get("plan", {})
+    if not map_name:
+        return jsonify({"error": "map_name required"}), 400
+    out_path = os.path.join(_paths_dir, map_name + '.json')
+    try:
+        os.makedirs(_paths_dir, exist_ok=True)
+        with open(out_path, "w") as f:
+            json.dump(plan, f, indent=2)
+        print(f"[hmi] Plan saved: {out_path}")
+        return jsonify({"saved": out_path})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── SocketIO events — coverage plan control ───────────────────────────────────
@@ -485,6 +701,26 @@ def on_reset():
     with _lock:
         _st["visited"]      = []
         _st["coverage_pct"] = 0.0
+    sio.emit("state", _snapshot())
+
+
+@sio.on("select_map")
+def on_select_map(data):
+    """Select a map by stem name; auto-loads matching plan from paths/."""
+    global _selected_map, _selected_plan_file
+    name = (data or {}).get("name", "").strip()
+    if not name:
+        return
+    _selected_map = name
+    plan_json = os.path.join(_paths_dir, name + '.json')
+    if os.path.exists(plan_json):
+        _selected_plan_file = plan_json
+        load_plan(plan_json)
+        sio.emit("toast", f"Map '{name}' selected — plan loaded")
+    else:
+        _selected_plan_file = ""
+        sio.emit("toast", f"Map '{name}' selected (no matching plan in paths/)")
+    sio.emit("map_selected", {"name": name})
     sio.emit("state", _snapshot())
 
 
@@ -631,26 +867,23 @@ def on_start_autonomy(data=None):
     """
     _stop_ros_node("teleop")
 
-    # Resolve map yaml from cus_nav2_config/maps/
-    map_yaml = ""
-    try:
-        from ament_index_python.packages import get_package_share_directory
-        pkg = get_package_share_directory('cus_nav2_config')
-        map_yaml = os.path.join(pkg, 'maps', 'my_map.yaml')
-    except Exception:
-        pass
-
-    # Resolve plan file from cus_nav2_config/paths/
     import glob as _glob
-    plan_file = ""
-    try:
-        from ament_index_python.packages import get_package_share_directory
-        pkg = get_package_share_directory('cus_nav2_config')
-        candidates = sorted(_glob.glob(os.path.join(pkg, 'paths', '*.json')))
+
+    # Resolve map yaml — use selected map, else first available
+    map_yaml = ""
+    if _selected_map:
+        map_yaml = os.path.join(_maps_dir, _selected_map + '.yaml')
+    if not map_yaml or not os.path.exists(map_yaml):
+        candidates = sorted(_glob.glob(os.path.join(_maps_dir, '*.yaml')))
+        if candidates:
+            map_yaml = candidates[0]
+
+    # Resolve plan file — use selected plan, else first available
+    plan_file = _selected_plan_file
+    if not plan_file or not os.path.exists(plan_file):
+        candidates = sorted(_glob.glob(os.path.join(_paths_dir, '*.json')))
         if candidates:
             plan_file = candidates[0]
-    except Exception:
-        pass
 
     use_sim = "true" if _sim_mode else "false"
     cmd = [
@@ -693,6 +926,17 @@ def on_start_coverage():
         _st["is_paused"]  = False
     sio.emit("state", _snapshot())
     sio.emit("toast", "Coverage started")
+
+
+@sio.on("set_initial_pose")
+def on_set_initial_pose(data):
+    """Publish a PoseWithCovarianceStamped to /initialpose for AMCL."""
+    x   = float(data.get("x",   0.0))
+    y   = float(data.get("y",   0.0))
+    yaw = float(data.get("yaw", 0.0))
+    if _ros_node:
+        _ros_node.pub_initial_pose(x, y, yaw)
+    sio.emit("toast", f"Initial pose set ({x:.2f}, {y:.2f}) yaw={_math.degrees(yaw):.1f}°")
 
 
 # ── SocketIO events — obstacle detector ──────────────────────────────────────
@@ -751,28 +995,42 @@ def main():
                     help="Publish cmd_vel as TwistStamped instead of Twist")
     args = ap.parse_args(argv)
 
-    global _use_stamped, _maps_dir
+    global _use_stamped, _maps_dir, _paths_dir, _selected_map, _selected_plan_file
     _use_stamped = args.stamped
     _maps_dir    = _resolve_maps_dir()
+    _paths_dir   = _resolve_paths_dir()
+    print(f"[hmi] Maps dir : {_maps_dir}")
+    print(f"[hmi] Paths dir: {_paths_dir}")
 
-    # Auto-discover plan from cus_nav2_config/paths/
+    # Auto-select first available map and load its matching plan
+    import glob as _glob
+    map_yamls = sorted(_glob.glob(os.path.join(_maps_dir, '*.yaml')))
+    for yaml_f in map_yamls:
+        stem = Path(yaml_f).stem
+        pgm  = os.path.join(_maps_dir, stem + '.pgm')
+        if os.path.exists(pgm):
+            _selected_map = stem
+            break
+
     plan_file = None
-    try:
-        from ament_index_python.packages import get_package_share_directory
-        import glob as _glob
-        pkg_paths = os.path.join(
-            get_package_share_directory('cus_nav2_config'), 'paths')
-        candidates = sorted(_glob.glob(os.path.join(pkg_paths, '*.json')))
-        if candidates:
-            plan_file = candidates[0]
-    except Exception:
-        pass
+    if _selected_map:
+        candidate = os.path.join(_paths_dir, _selected_map + '.json')
+        if os.path.exists(candidate):
+            plan_file = candidate
 
-    if plan_file and os.path.exists(plan_file):
+    if not plan_file:
+        # Fallback: first json in paths/
+        jsons = sorted(_glob.glob(os.path.join(_paths_dir, '*.json')))
+        if jsons:
+            plan_file = jsons[0]
+
+    if plan_file:
+        _selected_plan_file = plan_file
         load_plan(plan_file)
-        print(f"[hmi] Plan loaded: {plan_file}")
+        print(f"[hmi] Map selected : {_selected_map}")
+        print(f"[hmi] Plan loaded  : {plan_file}")
     else:
-        print("[hmi] No plan found in cus_nav2_config/paths/ — server ready without a plan.")
+        print("[hmi] No plan found in paths/ — server ready without a plan.")
 
     if HAS_ROS2:
         t = threading.Thread(target=_ros_thread, daemon=True)

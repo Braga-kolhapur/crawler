@@ -217,6 +217,92 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
 #toast.show{opacity:1}
 #toast.manual-mode{bottom:calc(var(--man-bot) + 10px)}
 @keyframes obs-pulse{0%,100%{opacity:1}50%{opacity:.75}}
+
+/* ── Initial Pose Modal ─────────────────────────────────────────── */
+#pose-modal{display:none;position:fixed;inset:0;z-index:600;
+  background:#000;flex-direction:column}
+#pose-modal.open{display:flex}
+#pose-modal-hdr{display:flex;align-items:center;gap:10px;padding:10px 14px;
+  background:var(--surf);border-bottom:1px solid var(--border);flex-shrink:0}
+#pose-modal-hdr h2{font-size:14px;font-weight:700;color:var(--text)}
+#pose-modal-hint{flex:1;font-size:11px;color:var(--dim)}
+#pose-modal-cancel{padding:6px 14px;border:1px solid var(--border);border-radius:7px;
+  background:var(--surf2);color:var(--dim);font-size:12px;cursor:pointer}
+#pose-modal-cancel:hover{color:var(--text)}
+#pose-canvas{display:block;flex:1;width:100%;touch-action:none;cursor:crosshair}
+
+/* ── Coverage Planner Modal ─────────────────────────────────────── */
+#planner-modal{display:none;position:fixed;inset:0;z-index:700;
+  background:var(--bg);flex-direction:column}
+#planner-modal.open{display:flex}
+#planner-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:var(--surf);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+#planner-hdr h2{font-size:13px;font-weight:700;white-space:nowrap;margin-right:4px}
+#planner-map-dd{padding:5px 8px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surf2);color:var(--text);font-size:11px;cursor:pointer;outline:none}
+#planner-map-dd:focus{border-color:var(--accent)}
+.pl-btn{padding:5px 10px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surf2);color:var(--text);font-size:11px;cursor:pointer;white-space:nowrap}
+.pl-btn:active{opacity:.7}
+.pl-btn-green{border-color:var(--green);color:var(--green)}
+.pl-btn-blue{border-color:var(--accent);color:var(--blue);background:rgba(31,111,235,.12)}
+.pl-btn-red{border-color:var(--red);color:var(--red)}
+.pl-btn-close{margin-left:auto;padding:5px 12px}
+#planner-map-info{font-size:10px;color:var(--dim);white-space:nowrap}
+#planner-body{display:flex;flex:1;overflow:hidden;min-height:0}
+#planner-canvas-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#000;position:relative}
+#planner-toolbar{display:flex;align-items:center;gap:6px;padding:5px 10px;
+  background:var(--surf2);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.pl-tool-btn{padding:4px 10px;border-radius:5px;border:1px solid var(--border);
+  background:var(--surf);color:var(--dim);font-size:11px;cursor:pointer}
+.pl-tool-btn.active{border-color:var(--accent);color:var(--blue);background:rgba(31,111,235,.15)}
+#planner-canvas{display:block;flex:1;width:100%;height:100%;touch-action:none;cursor:crosshair}
+#planner-status{position:absolute;bottom:6px;left:8px;right:8px;
+  background:rgba(22,27,34,.88);border:1px solid var(--border);border-radius:6px;
+  padding:4px 10px;font-size:10px;color:var(--dim);pointer-events:none}
+#planner-sidebar{width:260px;flex-shrink:0;display:flex;flex-direction:column;
+  overflow-y:auto;background:var(--surf);border-left:1px solid var(--border);
+  padding:8px}
+#planner-sidebar::-webkit-scrollbar{width:3px}
+#planner-sidebar::-webkit-scrollbar-thumb{background:var(--border)}
+.pl-sec{margin-bottom:10px}
+.pl-sec-title{font-size:10px;color:var(--dim);text-transform:uppercase;
+  letter-spacing:.7px;margin-bottom:5px}
+#planner-zone-list{display:flex;flex-direction:column;gap:4px;max-height:160px;
+  overflow-y:auto}
+#planner-zone-list::-webkit-scrollbar{width:3px}
+#planner-zone-list::-webkit-scrollbar-thumb{background:var(--border)}
+.pz-card{display:flex;align-items:center;gap:6px;padding:5px 8px;
+  border-radius:7px;border:1.5px solid var(--border);background:var(--surf2);cursor:pointer}
+.pz-card.selected{border-color:var(--accent)}
+.pz-swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.pz-name{font-size:12px;font-weight:600;flex:1}
+.pz-pts{font-size:10px;color:var(--dim)}
+.pz-del{background:none;border:none;color:var(--dim);font-size:14px;cursor:pointer;padding:0 2px;line-height:1}
+.pz-del:hover{color:var(--red)}
+.pl-prop-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.pl-prop-lbl{font-size:10px;color:var(--dim);width:70px;flex-shrink:0}
+.pl-prop-inp{flex:1;padding:4px 8px;background:var(--surf2);border:1px solid var(--border);
+  color:var(--text);border-radius:5px;font-size:11px;outline:none}
+.pl-prop-inp:focus{border-color:var(--accent)}
+#prop-angle-slider{flex:1;accent-color:var(--accent)}
+.pl-rot-btns{display:flex;gap:3px}
+.pl-rot-btn{padding:3px 7px;border-radius:5px;border:1px solid var(--border);
+  background:var(--surf2);color:var(--text);font-size:12px;cursor:pointer}
+@media(max-width:600px){
+  #planner-sidebar{width:100%;height:200px;border-left:none;border-top:1px solid var(--border)}
+  #planner-body{flex-direction:column}
+}
+/* ── Map selector row ───────────────────────────────────────────── */
+#map-sel-row{display:flex;align-items:center;gap:8px;padding:6px 0 2px;flex-shrink:0}
+#map-sel-row .ms-lbl{font-size:10px;color:var(--dim);flex-shrink:0;text-transform:uppercase;letter-spacing:.7px}
+#map-sel-dd{flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surf2);color:var(--text);font-size:12px;cursor:pointer;outline:none;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236e7681'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center}
+#map-sel-dd:focus{border-color:var(--accent)}
+#map-sel-dd option{background:var(--surf2);color:var(--text)}
 </style>
 </head>
 <body>
@@ -287,6 +373,14 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
     <div class="sec-title">Execution Sequence — drag to reorder</div>
     <div id="seq-list"></div>
 
+    <!-- Map selector -->
+    <div id="map-sel-row">
+      <span class="ms-lbl">Map</span>
+      <select id="map-sel-dd" onchange="selectMap(this.value)">
+        <option value="">Loading…</option>
+      </select>
+    </div>
+
     <div id="controls">
       <button class="cbtn cbtn-start" id="btn-start"    onclick="cmdStartAutonomy()">▶ Start Robot</button>
       <button class="cbtn cbtn-start" id="btn-coverage" onclick="cmdStartCoverage()" disabled
@@ -294,6 +388,14 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
       <button class="cbtn cbtn-pause" id="btn-pause"    onclick="cmdPause()" disabled>⏸ Pause</button>
       <button class="cbtn cbtn-stop"  id="btn-stop"     onclick="cmdStopAutonomy()" disabled>⏹ Stop</button>
       <button class="cbtn cbtn-fit"   onclick="fitMap()" title="Fit map">⤢</button>
+    </div>
+
+    <div style="display:flex;padding-top:6px">
+      <button class="cbtn" id="btn-init-pose" onclick="openPoseModal()"
+              style="background:var(--surf2);color:var(--blue);
+                     border:1px solid var(--accent);font-size:12px;padding:8px 0">
+        📍 Set Initial Pose
+      </button>
     </div>
 
     <!-- Node status row -->
@@ -363,6 +465,9 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
             onclick="cmdToggleTeleop()">🕹 Teleop</button>
     <button class="man-btn man-btn-go" id="btn-mapping"
             onclick="cmdToggleMapping()">▶ Mapping</button>
+    <button class="man-btn" id="btn-planner"
+            onclick="openPlanner()"
+            style="border-color:var(--blue);color:var(--blue)">🗺 Planner</button>
   </div>
 
   <!-- Map name row — only visible while mapping is active -->
@@ -373,6 +478,98 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
     <button class="man-btn" onclick="cmdSaveMap()" style="white-space:nowrap">
       💾 Save Map
     </button>
+  </div>
+</div>
+
+<!-- ── INITIAL POSE MODAL ─────────────────────────────────────────── -->
+<div id="pose-modal">
+  <div id="pose-modal-hdr">
+    <h2>📍 Set Initial Pose</h2>
+    <span id="pose-modal-hint">Click to place robot · hold &amp; drag to set direction</span>
+    <button id="pose-modal-cancel" onclick="closePoseModal()">✕ Cancel</button>
+  </div>
+  <canvas id="pose-canvas"></canvas>
+</div>
+
+<!-- ── COVERAGE PLANNER MODAL ─────────────────────────────────────── -->
+<div id="planner-modal">
+  <div id="planner-hdr">
+    <h2>🗺 Coverage Planner</h2>
+    <select id="planner-map-dd" onchange="plannerOnMapChange()">
+      <option value="">— select map —</option>
+    </select>
+    <span id="planner-map-info"></span>
+    <button class="pl-btn pl-btn-blue" onclick="plannerGenerateAll()">⚙ Generate All</button>
+    <button class="pl-btn pl-btn-green" onclick="plannerSave()">💾 Save Plan</button>
+    <button class="pl-btn pl-btn-red" onclick="plannerClearAll()">🗑 Clear All</button>
+    <button class="pl-btn pl-btn-close" onclick="closePlanner()">✕ Close</button>
+  </div>
+  <div id="planner-body">
+    <div id="planner-canvas-wrap">
+      <div id="planner-toolbar">
+        <span style="font-size:10px;color:var(--dim)">Tool:</span>
+        <button class="pl-tool-btn active" id="pl-tool-draw" onclick="setPlannerTool('draw')">✏ Draw Zone</button>
+        <button class="pl-tool-btn" id="pl-tool-pan" onclick="setPlannerTool('pan')">✋ Pan</button>
+        <span style="font-size:10px;color:var(--dim);margin-left:6px">Zoom:</span>
+        <button class="pl-tool-btn" onclick="plannerZoom(1/1.25)">−</button>
+        <span id="pl-zoom-lbl" style="font-size:10px;color:var(--dim);min-width:34px;text-align:center">100%</span>
+        <button class="pl-tool-btn" onclick="plannerZoom(1.25)">+</button>
+        <button class="pl-tool-btn" onclick="plannerFit()">Fit</button>
+        <span style="font-size:10px;color:var(--dim);margin-left:6px">
+          Drag to draw zone · click zone to select · scroll to zoom
+        </span>
+      </div>
+      <canvas id="planner-canvas"></canvas>
+      <div id="planner-status">Ready — load a map to begin</div>
+    </div>
+    <div id="planner-sidebar">
+      <div class="pl-sec">
+        <div class="pl-sec-title">Zones</div>
+        <div id="planner-zone-list"><div style="font-size:11px;color:var(--dim)">No zones yet</div></div>
+      </div>
+      <div class="pl-sec" id="planner-props" style="display:none">
+        <div class="pl-sec-title">Zone Properties — <span id="prop-key-lbl" style="color:var(--blue)"></span></div>
+        <div class="pl-prop-row">
+          <span class="pl-prop-lbl">Robot width</span>
+          <input class="pl-prop-inp" id="prop-rw" type="number" step="0.05" min="0.05" value="0.30"
+                 oninput="plannerPropChange()">
+          <span style="font-size:10px;color:var(--dim)">m</span>
+        </div>
+        <div class="pl-prop-row">
+          <span class="pl-prop-lbl">Stripe angle</span>
+          <input class="pl-prop-inp" id="prop-angle" type="number" step="5" min="0" max="360" value="0"
+                 oninput="plannerAngleSync()" style="width:52px;flex:none">
+          <input type="range" id="prop-angle-slider" min="0" max="180" value="0"
+                 oninput="plannerAngleSlider()">
+          <span style="font-size:10px;color:var(--dim)">°</span>
+        </div>
+        <div class="pl-prop-row">
+          <span class="pl-prop-lbl">Rect angle</span>
+          <input class="pl-prop-inp" id="prop-rect-angle" type="number" step="5" value="0"
+                 oninput="plannerPropChange()" style="width:52px;flex:none">
+          <div class="pl-rot-btns">
+            <button class="pl-rot-btn" onclick="plannerRotateRect(+15)">▲</button>
+            <button class="pl-rot-btn" onclick="plannerRotateRect(-15)">▼</button>
+          </div>
+          <span style="font-size:10px;color:var(--dim)">°</span>
+        </div>
+        <div id="prop-path-info" style="font-size:10px;color:var(--green);margin-bottom:6px"></div>
+        <button class="pl-btn pl-btn-blue" style="width:100%;padding:7px 0"
+                onclick="plannerGenerateSelected()">⚙ Generate Path for Selected Zone</button>
+      </div>
+      <div class="pl-sec">
+        <div class="pl-sec-title">Tips</div>
+        <div style="font-size:10px;color:var(--dim);line-height:1.7">
+          Draw tool → drag to create zone<br>
+          Pan tool → drag to pan map<br>
+          Click zone → select &amp; edit<br>
+          Scroll / pinch → zoom<br>
+          × on zone → delete<br>
+          Generate All → compute all paths<br>
+          Save Plan → writes paths/&lt;map&gt;.json
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -464,6 +661,7 @@ function switchTab(tab) {
   } else {
     if (!teleopOn) stopCmdVelLoop();
     stopLiveMapPoll();
+    loadMaps();  // refresh map list when switching to auto tab
   }
 }
 
@@ -487,6 +685,7 @@ function init() {
     nodeStatus      = {...nodeStatus, ...nsData};
     applyState(stData);
     updateNodeStatusUI();
+    loadMaps();      // populate map selector
     loadMapImage();  // pre-load map so it's ready when user switches to Auto
   });
 }
@@ -506,6 +705,44 @@ function loadMapImage() {
     mapImg.src = 'data:image/png;base64,' + d.b64;
   });
 }
+
+let _selectedMap = '';
+
+function loadMaps() {
+  fetch('/api/maps').then(r=>r.json()).then(d => {
+    _selectedMap = d.selected || '';
+    _renderMapSelector(d.maps || []);
+  });
+}
+
+function _renderMapSelector(maps) {
+  const dd = document.getElementById('map-sel-dd');
+  dd.innerHTML = '';
+  if (!maps.length) {
+    const opt = document.createElement('option');
+    opt.value = ''; opt.textContent = 'No maps found';
+    dd.appendChild(opt);
+    return;
+  }
+  maps.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    if (name === _selectedMap) opt.selected = true;
+    dd.appendChild(opt);
+  });
+}
+
+function selectMap(name) {
+  if (!name || name === _selectedMap) return;
+  socket.emit('select_map', {name});
+}
+
+socket.on('map_selected', d => {
+  _selectedMap = d.name;
+  const dd = document.getElementById('map-sel-dd');
+  if (dd) dd.value = _selectedMap;
+  loadMapImage();
+});
 
 // ════════════════════════════════════════════════════════════════════
 // AUTO TAB — MAP CANVAS
@@ -1358,6 +1595,822 @@ function toast(msg) {
   el.classList.add('show');
   if (_toastT) clearTimeout(_toastT);
   _toastT = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// INITIAL POSE MODAL
+// ════════════════════════════════════════════════════════════════════
+const poseCanvas = document.getElementById('pose-canvas');
+const poseCtx    = poseCanvas.getContext('2d');
+
+let _mZoom = 1, _mPanX = 0, _mPanY = 0;
+let _poseClick  = null;   // {cx, cy} canvas coords after first click
+let _poseDrag   = null;   // {cx, cy} canvas coords while dragging
+let _posePhase  = 'idle'; // 'idle' | 'placed' | 'dragging'
+let _posePtrId  = null;
+
+function openPoseModal() {
+  if (!mapImg) { toast('Map not loaded yet'); return; }
+  _posePhase = 'idle';
+  _poseClick = null;
+  _poseDrag  = null;
+  document.getElementById('pose-modal').classList.add('open');
+  _fitPoseMap();
+  document.getElementById('pose-modal-hint').textContent =
+    'Click to place robot · hold & drag to set direction';
+  _renderPose();
+}
+
+function closePoseModal() {
+  document.getElementById('pose-modal').classList.remove('open');
+  _posePhase = 'idle';
+  _poseClick = null;
+  _poseDrag  = null;
+}
+
+function _fitPoseMap() {
+  poseCanvas.width  = poseCanvas.clientWidth  || window.innerWidth;
+  poseCanvas.height = poseCanvas.clientHeight || (window.innerHeight - 52);
+  const cw = poseCanvas.width, ch = poseCanvas.height;
+  _mZoom = Math.min(cw / mapImg.width, ch / mapImg.height) * 0.96;
+  _mPanX = (cw - mapImg.width  * _mZoom) / 2;
+  _mPanY = (ch - mapImg.height * _mZoom) / 2;
+}
+
+new ResizeObserver(() => {
+  if (!document.getElementById('pose-modal').classList.contains('open')) return;
+  _fitPoseMap();
+  _renderPose();
+}).observe(poseCanvas);
+
+function _poseCanvasToWorld(cx, cy) {
+  const mi   = plan.map || {};
+  const res  = mi.resolution || 0.05;
+  const orig = mi.origin     || [0, 0, 0];
+  const h    = mi.height_px  || (mapImg ? mapImg.height : 400);
+  const px   = (cx - _mPanX) / _mZoom;
+  const py   = (cy - _mPanY) / _mZoom;
+  return [px * res + orig[0], (h - py) * res + orig[1]];
+}
+
+function _renderPose() {
+  const w = poseCanvas.width, h = poseCanvas.height;
+  poseCtx.clearRect(0, 0, w, h);
+
+  // Map image
+  if (mapImg) {
+    poseCtx.drawImage(mapImg, _mPanX, _mPanY, mapImg.width * _mZoom, mapImg.height * _mZoom);
+  }
+
+  if (!_poseClick) return;
+  const {cx, cy} = _poseClick;
+
+  // Draw arrow if dragging
+  if (_poseDrag) {
+    const dx = _poseDrag.cx - cx;
+    const dy = _poseDrag.cy - cy;
+    const len = Math.hypot(dx, dy);
+    if (len > 4) {
+      const ux = dx / len, uy = dy / len;
+      const arrowLen = Math.max(len, 30);
+      const ex = cx + ux * arrowLen, ey = cy + uy * arrowLen;
+
+      poseCtx.beginPath();
+      poseCtx.moveTo(cx, cy);
+      poseCtx.lineTo(ex, ey);
+      poseCtx.strokeStyle = '#facc15';
+      poseCtx.lineWidth   = 3;
+      poseCtx.stroke();
+
+      // Arrowhead
+      const aw = 10, al = 16;
+      const nx = -uy, ny = ux;
+      poseCtx.beginPath();
+      poseCtx.moveTo(ex, ey);
+      poseCtx.lineTo(ex - ux * al + nx * aw, ey - uy * al + ny * aw);
+      poseCtx.lineTo(ex - ux * al - nx * aw, ey - uy * al - ny * aw);
+      poseCtx.closePath();
+      poseCtx.fillStyle = '#facc15';
+      poseCtx.fill();
+    }
+  }
+
+  // Position dot
+  poseCtx.beginPath();
+  poseCtx.arc(cx, cy, 10, 0, Math.PI * 2);
+  poseCtx.fillStyle = 'rgba(239,68,68,0.8)';
+  poseCtx.fill();
+  poseCtx.strokeStyle = '#fff';
+  poseCtx.lineWidth   = 2.5;
+  poseCtx.stroke();
+}
+
+// Pointer events
+poseCanvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  poseCanvas.setPointerCapture(e.pointerId);
+  _posePtrId = e.pointerId;
+  const r = poseCanvas.getBoundingClientRect();
+  _poseClick = {cx: e.clientX - r.left, cy: e.clientY - r.top};
+  _poseDrag  = null;
+  _posePhase = 'placed';
+  document.getElementById('pose-modal-hint').textContent =
+    'Hold & drag to set facing direction, release to confirm';
+  _renderPose();
+}, {passive: false});
+
+poseCanvas.addEventListener('pointermove', e => {
+  if (!_poseClick || e.pointerId !== _posePtrId) return;
+  e.preventDefault();
+  const r = poseCanvas.getBoundingClientRect();
+  _poseDrag = {cx: e.clientX - r.left, cy: e.clientY - r.top};
+  _posePhase = 'dragging';
+  _renderPose();
+}, {passive: false});
+
+poseCanvas.addEventListener('pointerup', e => {
+  if (e.pointerId !== _posePtrId || !_poseClick) return;
+  e.preventDefault();
+
+  const [wx, wy] = _poseCanvasToWorld(_poseClick.cx, _poseClick.cy);
+
+  let yaw = 0;
+  if (_poseDrag) {
+    const dx = _poseDrag.cx - _poseClick.cx;
+    const dy = _poseDrag.cy - _poseClick.cy;
+    if (Math.hypot(dx, dy) > 5) {
+      yaw = Math.atan2(-dy, dx);  // canvas Y is flipped vs ROS world Y
+    }
+  }
+
+  socket.emit('set_initial_pose', {x: wx, y: wy, yaw});
+  closePoseModal();
+}, {passive: false});
+
+// ════════════════════════════════════════════════════════════════════
+// COVERAGE PLANNER MODAL
+// ════════════════════════════════════════════════════════════════════
+const PLANNER_COLORS = ['#E74C3C','#3498DB','#2ECC71','#F39C12','#9B59B6',
+  '#1ABC9C','#E67E22','#E91E63','#00BCD4','#8BC34A','#FF5722','#607D8B'];
+const MIN_ZONE_PX = 8;
+
+let _pl = {
+  tool:      'draw',   // 'draw' | 'pan'
+  mapName:   '',
+  mapImg:    null,
+  mapMeta:   null,     // {resolution, origin, width, height}
+  zoom:      1,
+  panX:      0,
+  panY:      0,
+  zones:     {},       // key → {key,x1,y1,x2,y2,robot_width,angle,rect_angle,color,waypoints:[]}
+  sequence:  [],
+  selKey:    null,
+  drawing:   false,
+  drawStart: null,     // {px,py} pixel coords
+  dragging:  false,
+  dragAnchor:null,
+  pinchAnchor:null,
+  ptrIds:    [],
+};
+let _plKeyCounter = 0;
+
+const plCanvas = document.getElementById('planner-canvas');
+const plCtx    = plCanvas.getContext('2d');
+
+function openPlanner() {
+  document.getElementById('planner-modal').classList.add('open');
+  _plResizeCanvas();
+  // Populate map dropdown
+  fetch('/api/maps').then(r=>r.json()).then(d => {
+    const dd = document.getElementById('planner-map-dd');
+    const prev = dd.value;
+    dd.innerHTML = '<option value="">— select map —</option>';
+    (d.maps||[]).forEach(m => {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = m;
+      if (m === (prev || _pl.mapName)) o.selected = true;
+      dd.appendChild(o);
+    });
+    if (!_pl.mapName && dd.value) plannerLoadMap(dd.value);
+  });
+}
+
+function closePlanner() {
+  document.getElementById('planner-modal').classList.remove('open');
+}
+
+function plannerOnMapChange() {
+  const name = document.getElementById('planner-map-dd').value;
+  if (name) plannerLoadMap(name);
+}
+
+function plannerLoadMap(name) {
+  if (!name) return;
+  _plSetStatus('Loading map…');
+  fetch(`/api/planner/map_data?name=${encodeURIComponent(name)}`)
+    .then(r=>r.json()).then(d => {
+      if (d.error) { _plSetStatus('Error: ' + d.error); return; }
+      _pl.mapName = name;
+      _pl.mapMeta = {resolution:d.resolution, origin:d.origin, width:d.width, height:d.height};
+      _pl.zones   = {};
+      _pl.sequence= [];
+      _pl.selKey  = null;
+      _plKeyCounter = 0;
+      const img = new Image();
+      img.onload = () => {
+        _pl.mapImg = img;
+        _plFit();
+        _plRenderZones();
+        _plSetStatus(`Loaded: ${name}  ${d.width}×${d.height}px  ${d.resolution}m/px`);
+        document.getElementById('planner-map-info').textContent =
+          `${d.width}×${d.height}px · ${d.resolution}m/px`;
+        _plRefreshSidebar();
+      };
+      img.src = 'data:image/png;base64,' + d.b64;
+    }).catch(e => _plSetStatus('Fetch error: ' + e));
+}
+
+function setPlannerTool(mode) {
+  _pl.tool = mode;
+  document.getElementById('pl-tool-draw').classList.toggle('active', mode==='draw');
+  document.getElementById('pl-tool-pan') .classList.toggle('active', mode==='pan');
+  plCanvas.style.cursor = mode === 'pan' ? 'grab' : 'crosshair';
+}
+
+// ── Resize ────────────────────────────────────────────────────────
+function _plResizeCanvas() {
+  const wrap = document.getElementById('planner-canvas-wrap');
+  plCanvas.width  = wrap.clientWidth  || window.innerWidth;
+  plCanvas.height = (wrap.clientHeight || window.innerHeight) - 40;
+}
+new ResizeObserver(() => {
+  if (document.getElementById('planner-modal').classList.contains('open')) {
+    _plResizeCanvas(); _plRenderZones();
+  }
+}).observe(document.getElementById('planner-canvas-wrap'));
+
+// ── Zoom / pan ────────────────────────────────────────────────────
+function _plApplyZoom(factor, cx, cy) {
+  const oldZ = _pl.zoom;
+  _pl.zoom   = Math.max(0.05, Math.min(16, _pl.zoom * factor));
+  if (cx != null) {
+    _pl.panX = cx - (cx - _pl.panX) * (_pl.zoom / oldZ);
+    _pl.panY = cy - (cy - _pl.panY) * (_pl.zoom / oldZ);
+  }
+  document.getElementById('pl-zoom-lbl').textContent = Math.round(_pl.zoom*100)+'%';
+  _plRenderZones();
+}
+
+function plannerZoom(factor) { _plApplyZoom(factor, plCanvas.width/2, plCanvas.height/2); }
+
+function plannerFit() {
+  if (!_pl.mapImg) return;
+  const cw = plCanvas.width, ch = plCanvas.height;
+  _pl.zoom = Math.min(cw/_pl.mapImg.width, ch/_pl.mapImg.height) * 0.96;
+  _pl.panX = (cw - _pl.mapImg.width  * _pl.zoom) / 2;
+  _pl.panY = (ch - _pl.mapImg.height * _pl.zoom) / 2;
+  document.getElementById('pl-zoom-lbl').textContent = Math.round(_pl.zoom*100)+'%';
+  _plRenderZones();
+}
+function _plFit() { plannerFit(); }
+
+// ── Coord helpers ─────────────────────────────────────────────────
+function _plCanvasToPx(cx, cy) {
+  return [(cx - _pl.panX) / _pl.zoom, (cy - _pl.panY) / _pl.zoom];
+}
+function _plPxToCanvas(px, py) {
+  return [px * _pl.zoom + _pl.panX, py * _pl.zoom + _pl.panY];
+}
+function _plPxToWorld(px, py) {
+  const m = _pl.mapMeta; if (!m) return [0,0];
+  return [m.origin[0]+px*m.resolution, m.origin[1]+(m.height-py)*m.resolution];
+}
+
+// ── Zone helpers ──────────────────────────────────────────────────
+function _plNextKey() {
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  for (const c of letters) if (!(c in _pl.zones)) return c;
+  for (const a of letters) for (const b of letters) {
+    const k = a+b; if (!(k in _pl.zones)) return k;
+  }
+  return 'z' + Object.keys(_pl.zones).length;
+}
+
+function _plZoneAt(px, py) {
+  for (const z of Object.values(_pl.zones).reverse()) {
+    const x1 = Math.min(z.x1,z.x2), x2 = Math.max(z.x1,z.x2);
+    const y1 = Math.min(z.y1,z.y2), y2 = Math.max(z.y1,z.y2);
+    // simplified AABB hit (rect_angle=0 approximation for click detection)
+    const cx = (z.x1+z.x2)/2, cy = (z.y1+z.y2)/2;
+    const hw  = Math.abs(z.x2-z.x1)/2, hh = Math.abs(z.y2-z.y1)/2;
+    const ra  = z.rect_angle * Math.PI / 180;
+    const dx  = px - cx, dy = py - cy;
+    const ca  = Math.cos(-ra), sa = Math.sin(-ra);
+    const lx  = dx*ca - dy*sa, ly = dx*sa + dy*ca;
+    if (Math.abs(lx) <= hw && Math.abs(ly) <= hh) return z;
+  }
+  return null;
+}
+
+function _plSelect(key) {
+  _pl.selKey = key;
+  _plRefreshSidebar();
+  _plRenderZones();
+}
+
+function plannerDeleteZone(key) {
+  delete _pl.zones[key];
+  _pl.sequence = _pl.sequence.filter(k => k !== key);
+  if (_pl.selKey === key) _pl.selKey = null;
+  _plRefreshSidebar();
+  _plRenderZones();
+}
+
+function plannerClearAll() {
+  if (!Object.keys(_pl.zones).length) return;
+  if (!confirm('Delete all zones?')) return;
+  _pl.zones = {}; _pl.sequence = []; _pl.selKey = null;
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────
+function _plRefreshSidebar() {
+  const list = document.getElementById('planner-zone-list');
+  const keys = _pl.sequence.filter(k => k in _pl.zones);
+  if (!keys.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--dim)">No zones yet</div>';
+  } else {
+    list.innerHTML = '';
+    keys.forEach(key => {
+      const z   = _pl.zones[key];
+      const pts = z.waypoints.filter(w=>w.type==='coverage').length;
+      const card = document.createElement('div');
+      card.className = 'pz-card' + (key===_pl.selKey?' selected':'');
+      card.innerHTML = `
+        <div class="pz-swatch" style="background:${z.color}"></div>
+        <span class="pz-name">${key.toUpperCase()}</span>
+        <span class="pz-pts">${pts ? pts+' pts' : 'no path'}</span>
+        <button class="pz-del" onclick="plannerDeleteZone('${key}');event.stopPropagation()">×</button>`;
+      card.onclick = () => _plSelect(key);
+      list.appendChild(card);
+    });
+  }
+
+  const propsEl = document.getElementById('planner-props');
+  if (_pl.selKey && _pl.zones[_pl.selKey]) {
+    propsEl.style.display = '';
+    const z = _pl.zones[_pl.selKey];
+    document.getElementById('prop-key-lbl').textContent = _pl.selKey.toUpperCase();
+    document.getElementById('prop-rw').value          = z.robot_width.toFixed(2);
+    document.getElementById('prop-angle').value       = z.angle.toFixed(1);
+    document.getElementById('prop-angle-slider').value= z.angle;
+    document.getElementById('prop-rect-angle').value  = z.rect_angle.toFixed(1);
+    const pts = z.waypoints.filter(w=>w.type==='coverage').length;
+    const len = _plPathLen(z.waypoints);
+    document.getElementById('prop-path-info').textContent =
+      pts ? `Path: ${len.toFixed(1)} m · ${pts} coverage pts` : 'No path generated yet';
+  } else {
+    propsEl.style.display = 'none';
+  }
+}
+
+function _plPathLen(wps) {
+  let t = 0;
+  for (let i = 1; i < wps.length; i++) {
+    t += Math.hypot(wps[i].x-wps[i-1].x, wps[i].y-wps[i-1].y);
+  }
+  return t;
+}
+
+function plannerPropChange() {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) return;
+  const z = _pl.zones[_pl.selKey];
+  z.robot_width = Math.max(0.05, parseFloat(document.getElementById('prop-rw').value)||0.30);
+  z.rect_angle  = (parseFloat(document.getElementById('prop-rect-angle').value)||0) % 360;
+  z.waypoints   = [];
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+function plannerAngleSync() {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) return;
+  const v = parseFloat(document.getElementById('prop-angle').value) || 0;
+  _pl.zones[_pl.selKey].angle = v % 360;
+  document.getElementById('prop-angle-slider').value = v % 180;
+  _pl.zones[_pl.selKey].waypoints = [];
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+function plannerAngleSlider() {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) return;
+  const v = parseFloat(document.getElementById('prop-angle-slider').value) || 0;
+  _pl.zones[_pl.selKey].angle = v;
+  document.getElementById('prop-angle').value = v.toFixed(1);
+  _pl.zones[_pl.selKey].waypoints = [];
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+function plannerRotateRect(delta) {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) return;
+  const z = _pl.zones[_pl.selKey];
+  z.rect_angle = ((z.rect_angle + delta) % 360 + 360) % 360;
+  document.getElementById('prop-rect-angle').value = z.rect_angle.toFixed(1);
+  z.waypoints = [];
+  _plRefreshSidebar(); _plRenderZones();
+}
+
+// ── Generate paths ────────────────────────────────────────────────
+function plannerGenerateAll() {
+  const keys = Object.keys(_pl.zones);
+  if (!keys.length) { toast('No zones to generate paths for'); return; }
+  if (!_pl.mapName) { toast('No map loaded'); return; }
+  _plSetStatus('Generating paths…');
+  const zonesPayload = {};
+  keys.forEach(k => {
+    const z = _pl.zones[k];
+    zonesPayload[k] = {x1:z.x1,y1:z.y1,x2:z.x2,y2:z.y2,
+      robot_width:z.robot_width, angle:z.angle, rect_angle:z.rect_angle};
+  });
+  fetch('/api/planner/generate', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({map_name:_pl.mapName, zones:zonesPayload})
+  }).then(r=>r.json()).then(d => {
+    if (d.error) { _plSetStatus('Error: '+d.error); return; }
+    let total = 0;
+    Object.entries(d.waypoints).forEach(([k,wps]) => {
+      if (_pl.zones[k]) { _pl.zones[k].waypoints = wps; total += wps.length; }
+    });
+    _plRefreshSidebar(); _plRenderZones();
+    _plSetStatus(`Generated ${total} waypoints across ${keys.length} zones`);
+  }).catch(e => _plSetStatus('Error: '+e));
+}
+
+function plannerGenerateSelected() {
+  if (!_pl.selKey || !_pl.zones[_pl.selKey]) {
+    toast('Select a zone first'); return;
+  }
+  const z = _pl.zones[_pl.selKey];
+  const payload = {x1:z.x1,y1:z.y1,x2:z.x2,y2:z.y2,
+    robot_width:z.robot_width, angle:z.angle, rect_angle:z.rect_angle};
+  fetch('/api/planner/generate', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({map_name:_pl.mapName, zones:{[_pl.selKey]:payload}})
+  }).then(r=>r.json()).then(d => {
+    if (d.error) { toast('Error: '+d.error); return; }
+    const wps = d.waypoints[_pl.selKey] || [];
+    _pl.zones[_pl.selKey].waypoints = wps;
+    _plRefreshSidebar(); _plRenderZones();
+  });
+}
+
+// ── Save plan ─────────────────────────────────────────────────────
+function plannerSave() {
+  if (!_pl.mapName) { toast('No map loaded'); return; }
+  const allHavePaths = _pl.sequence.every(k => _pl.zones[k]?.waypoints?.length);
+  if (!allHavePaths) {
+    if (!confirm('Some zones have no paths. Save anyway?')) return;
+  }
+  const m  = _pl.mapMeta || {};
+  const plan = {
+    version: '1.0', tool: 'coverage_path_planner_hmi',
+    map: {
+      pgm_file:   _pl.mapName + '.pgm',
+      yaml_file:  _pl.mapName + '.yaml',
+      resolution: m.resolution || 0.05,
+      origin:     m.origin || [0,0,0],
+      width_px:   m.width  || 0,
+      height_px:  m.height || 0,
+    },
+    sequence: _pl.sequence.filter(k => k in _pl.zones),
+    zones: {},
+  };
+  _pl.sequence.forEach(k => {
+    const z = _pl.zones[k]; if (!z) return;
+    const x1 = Math.min(z.x1,z.x2), x2 = Math.max(z.x1,z.x2);
+    const y1 = Math.min(z.y1,z.y2), y2 = Math.max(z.y1,z.y2);
+    const res = m.resolution || 0.05;
+    plan.zones[k] = {
+      key: k,
+      pixel_bounds: {x1,y1,x2,y2},
+      world_bounds: {
+        x_min: m.origin[0]+x1*res, y_min: m.origin[1]+(m.height-y2)*res,
+        x_max: m.origin[0]+x2*res, y_max: m.origin[1]+(m.height-y1)*res,
+      },
+      dimensions_m: {
+        width:  parseFloat(((x2-x1)*res).toFixed(3)),
+        height: parseFloat(((y2-y1)*res).toFixed(3)),
+      },
+      path_type:       'boustrophedon',
+      robot_width_m:   z.robot_width,
+      angle_deg:       z.angle,
+      rect_angle_deg:  z.rect_angle,
+      color:           z.color,
+      waypoints:       z.waypoints,
+    };
+  });
+  fetch('/api/planner/save', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({map_name:_pl.mapName, plan})
+  }).then(r=>r.json()).then(d => {
+    if (d.error) { toast('Save error: '+d.error); return; }
+    toast(`✓ Plan saved → paths/${_pl.mapName}.json`);
+    _plSetStatus(`Saved: paths/${_pl.mapName}.json`);
+  }).catch(e => toast('Save error: '+e));
+}
+
+// ── Canvas rendering ──────────────────────────────────────────────
+function _plRenderZones() {
+  const w = plCanvas.width, h = plCanvas.height;
+  plCtx.clearRect(0, 0, w, h);
+
+  // Background
+  plCtx.fillStyle = '#111';
+  plCtx.fillRect(0, 0, w, h);
+
+  // Map image
+  if (_pl.mapImg) {
+    plCtx.drawImage(_pl.mapImg, _pl.panX, _pl.panY,
+                    _pl.mapImg.width * _pl.zoom, _pl.mapImg.height * _pl.zoom);
+  }
+
+  // Zones + paths
+  for (const z of Object.values(_pl.zones)) {
+    _plDrawZone(z);
+    if (z.waypoints.length) _plDrawPath(z);
+  }
+
+  // Rubber band while drawing
+  if (_pl.drawing && _pl.drawStart && _pl._drawCurrent) {
+    const [cx1, cy1] = _plPxToCanvas(_pl.drawStart[0], _pl.drawStart[1]);
+    const [cx2, cy2] = _plPxToCanvas(_pl._drawCurrent[0], _pl._drawCurrent[1]);
+    plCtx.strokeStyle = '#fff';
+    plCtx.lineWidth   = 1.5;
+    plCtx.setLineDash([4, 4]);
+    plCtx.strokeRect(cx1, cy1, cx2-cx1, cy2-cy1);
+    plCtx.setLineDash([]);
+  }
+}
+
+function _plDrawZone(z) {
+  const x1 = Math.min(z.x1,z.x2), x2 = Math.max(z.x1,z.x2);
+  const y1 = Math.min(z.y1,z.y2), y2 = Math.max(z.y1,z.y2);
+  const ra  = z.rect_angle * Math.PI / 180;
+  const cx  = (x1+x2)/2, cy = (y1+y2)/2;
+  const hw  = (x2-x1)/2, hh = (y2-y1)/2;
+  const ca  = Math.cos(ra), sa = Math.sin(ra);
+  const corners = [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([dx,dy]) => {
+    const rx = cx + dx*ca - dy*sa, ry = cy + dx*sa + dy*ca;
+    return _plPxToCanvas(rx, ry);
+  });
+
+  const isSel = z.key === _pl.selKey;
+  plCtx.beginPath();
+  plCtx.moveTo(corners[0][0], corners[0][1]);
+  for (let i = 1; i < 4; i++) plCtx.lineTo(corners[i][0], corners[i][1]);
+  plCtx.closePath();
+  plCtx.fillStyle   = z.color + '33';
+  plCtx.fill();
+  plCtx.strokeStyle = isSel ? '#fff' : z.color;
+  plCtx.lineWidth   = isSel ? 2.5 : 1.5;
+  plCtx.stroke();
+
+  // Label
+  const fs = Math.max(9, Math.min(20, Math.round(14 * _pl.zoom)));
+  plCtx.font      = `700 ${fs}px sans-serif`;
+  plCtx.shadowColor='#000'; plCtx.shadowBlur=3;
+  plCtx.fillStyle = '#fff';
+  plCtx.fillText(z.key.toUpperCase(), corners[0][0]+3, corners[0][1]+fs+2);
+  plCtx.shadowBlur = 0;
+}
+
+function _plDrawPath(z) {
+  if (!_pl.mapMeta) return;
+  const m = _pl.mapMeta;
+  const toCvs = (wx, wy) => {
+    const px = (wx - m.origin[0]) / m.resolution;
+    const py = m.height - (wy - m.origin[1]) / m.resolution;
+    return _plPxToCanvas(px, py);
+  };
+
+  const dotR = Math.max(2, 2.5 * _pl.zoom);
+
+  // Lines (group by stripe)
+  for (let i = 0; i < z.waypoints.length-1; i++) {
+    const a = z.waypoints[i], b = z.waypoints[i+1];
+    const [ax,ay] = toCvs(a.x,a.y), [bx,by] = toCvs(b.x,b.y);
+    plCtx.beginPath();
+    plCtx.moveTo(ax,ay); plCtx.lineTo(bx,by);
+    if (a.stripe===b.stripe && a.type!=='transition' && b.type!=='transition') {
+      plCtx.strokeStyle = z.color; plCtx.lineWidth = Math.max(1.5, 2*_pl.zoom);
+      plCtx.setLineDash([]);
+    } else {
+      plCtx.strokeStyle = z.color+'88'; plCtx.lineWidth = 1;
+      plCtx.setLineDash([4,4]);
+    }
+    plCtx.stroke();
+    plCtx.setLineDash([]);
+  }
+
+  // Dots
+  z.waypoints.forEach((wp,i) => {
+    if (wp.type==='transition') return;
+    const [cx2,cy2] = toCvs(wp.x,wp.y);
+    plCtx.beginPath();
+    plCtx.arc(cx2,cy2, i===0 ? dotR+2 : dotR, 0, Math.PI*2);
+    plCtx.fillStyle   = i===0 ? '#fff' : z.color;
+    plCtx.fill();
+    if (i===0) { plCtx.strokeStyle=z.color; plCtx.lineWidth=2; plCtx.stroke(); }
+  });
+}
+
+function _plSetStatus(msg) {
+  document.getElementById('planner-status').textContent = msg;
+}
+
+// ── Mouse / Touch events ──────────────────────────────────────────
+plCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = plCanvas.getBoundingClientRect();
+  _plApplyZoom(e.deltaY < 0 ? 1.12 : 1/1.12, e.clientX-r.left, e.clientY-r.top);
+}, {passive:false});
+
+plCanvas.addEventListener('mousedown', e => {
+  e.preventDefault();
+  const r  = plCanvas.getBoundingClientRect();
+  const cx = e.clientX-r.left, cy = e.clientY-r.top;
+  const [px,py] = _plCanvasToPx(cx,cy);
+
+  if (_pl.tool === 'pan' || e.button === 1) {
+    _pl.dragging   = true;
+    _pl.dragAnchor = {mx:cx, my:cy, px:_pl.panX, py:_pl.panY};
+    plCanvas.style.cursor = 'grabbing';
+    return;
+  }
+
+  // Draw tool — check if clicking existing zone
+  if (!_pl.mapImg) return;
+  const hit = _plZoneAt(px, py);
+  if (hit) { _plSelect(hit.key); return; }
+
+  // Start drawing new zone
+  _pl.drawing    = true;
+  _pl.drawStart  = [px, py];
+  _pl._drawCurrent = [px, py];
+  _plSelect(null);
+});
+
+plCanvas.addEventListener('mousemove', e => {
+  const r  = plCanvas.getBoundingClientRect();
+  const cx = e.clientX-r.left, cy = e.clientY-r.top;
+
+  if (_pl.dragging && _pl.dragAnchor) {
+    _pl.panX = _pl.dragAnchor.px + cx - _pl.dragAnchor.mx;
+    _pl.panY = _pl.dragAnchor.py + cy - _pl.dragAnchor.my;
+    _plRenderZones(); return;
+  }
+  if (_pl.drawing && _pl.drawStart) {
+    _pl._drawCurrent = _plCanvasToPx(cx, cy);
+    _plRenderZones();
+    // Show cursor position
+    if (_pl.mapMeta) {
+      const [wx,wy] = _plPxToWorld(..._pl._drawCurrent);
+      const w = Math.abs(_pl._drawCurrent[0]-_pl.drawStart[0])*_pl.mapMeta.resolution;
+      const h = Math.abs(_pl._drawCurrent[1]-_pl.drawStart[1])*_pl.mapMeta.resolution;
+      _plSetStatus(`Drawing: ${w.toFixed(2)}×${h.toFixed(2)} m`);
+    }
+  }
+});
+
+plCanvas.addEventListener('mouseup', e => {
+  if (_pl.dragging) {
+    _pl.dragging = false; _pl.dragAnchor = null;
+    plCanvas.style.cursor = _pl.tool==='pan' ? 'grab' : 'crosshair';
+    return;
+  }
+  if (!_pl.drawing || !_pl.drawStart) return;
+  _pl.drawing = false;
+
+  const r  = plCanvas.getBoundingClientRect();
+  const cx = e.clientX-r.left, cy = e.clientY-r.top;
+  const [ex,ey] = _plCanvasToPx(cx,cy);
+  const [sx,sy] = _pl.drawStart;
+  _pl.drawStart = null;
+
+  // Too small
+  if (Math.abs(ex-sx)*_pl.zoom < MIN_ZONE_PX || Math.abs(ey-sy)*_pl.zoom < MIN_ZONE_PX) {
+    _plSetStatus('Zone too small — try dragging a larger rectangle');
+    _plRenderZones(); return;
+  }
+
+  const key   = _plNextKey();
+  const color = PLANNER_COLORS[Object.keys(_pl.zones).length % PLANNER_COLORS.length];
+  const w_m   = Math.abs(ex-sx) * (_pl.mapMeta?.resolution || 0.05);
+  const h_m   = Math.abs(ey-sy) * (_pl.mapMeta?.resolution || 0.05);
+  _pl.zones[key] = {
+    key, x1:sx, y1:sy, x2:ex, y2:ey,
+    robot_width: 0.30,
+    angle:       w_m >= h_m ? 0 : 90,
+    rect_angle:  0,
+    color,
+    waypoints:   [],
+  };
+  _pl.sequence.push(key);
+  _plSelect(key);
+  _plSetStatus(`Zone '${key}' — ${w_m.toFixed(2)}×${h_m.toFixed(2)} m · ${Math.ceil(Math.min(w_m,h_m)/0.30)} stripes`);
+  _plRenderZones();
+});
+
+plCanvas.addEventListener('mouseleave', () => {
+  if (_pl.dragging) { _pl.dragging = false; _pl.dragAnchor = null; }
+  if (_pl.drawing)  { _pl.drawing  = false; _pl.drawStart  = null; _plRenderZones(); }
+});
+
+// Touch events
+plCanvas.addEventListener('touchstart', _plTouchStart, {passive:false});
+plCanvas.addEventListener('touchmove',  _plTouchMove,  {passive:false});
+plCanvas.addEventListener('touchend',   _plTouchEnd,   {passive:false});
+
+function _plTouchXY(t) {
+  const r = plCanvas.getBoundingClientRect();
+  return [t.clientX-r.left, t.clientY-r.top];
+}
+function _plTouchStart(e) {
+  e.preventDefault();
+  if (e.touches.length === 2) {
+    const [ax,ay] = _plTouchXY(e.touches[0]);
+    const [bx,by] = _plTouchXY(e.touches[1]);
+    _pl.pinchAnchor = {
+      dist: Math.hypot(bx-ax,by-ay), zoom:_pl.zoom,
+      midX:(ax+bx)/2, midY:(ay+by)/2,
+    };
+    _pl.drawing = false; _pl.dragging = false;
+    return;
+  }
+  if (e.touches.length === 1) {
+    _pl.pinchAnchor = null;
+    const [cx,cy] = _plTouchXY(e.touches[0]);
+    const [px,py] = _plCanvasToPx(cx,cy);
+    if (_pl.tool === 'pan') {
+      _pl.dragging   = true;
+      _pl.dragAnchor = {mx:cx,my:cy,px:_pl.panX,py:_pl.panY};
+    } else {
+      const hit = _plZoneAt(px,py);
+      if (hit) { _plSelect(hit.key); return; }
+      if (_pl.mapImg) {
+        _pl.drawing = true; _pl.drawStart = [px,py]; _pl._drawCurrent=[px,py];
+        _plSelect(null);
+      }
+    }
+  }
+}
+function _plTouchMove(e) {
+  e.preventDefault();
+  if (e.touches.length === 2 && _pl.pinchAnchor) {
+    const [ax,ay] = _plTouchXY(e.touches[0]);
+    const [bx,by] = _plTouchXY(e.touches[1]);
+    const dist = Math.hypot(bx-ax,by-ay);
+    const factor = dist / _pl.pinchAnchor.dist;
+    const newZ = Math.max(0.05, Math.min(16, _pl.pinchAnchor.zoom * factor));
+    const oldZ = _pl.zoom; _pl.zoom = newZ;
+    _pl.panX = _pl.pinchAnchor.midX - (_pl.pinchAnchor.midX-_pl.panX)*(newZ/oldZ);
+    _pl.panY = _pl.pinchAnchor.midY - (_pl.pinchAnchor.midY-_pl.panY)*(newZ/oldZ);
+    document.getElementById('pl-zoom-lbl').textContent = Math.round(_pl.zoom*100)+'%';
+    _plRenderZones(); return;
+  }
+  if (e.touches.length === 1) {
+    const [cx,cy] = _plTouchXY(e.touches[0]);
+    if (_pl.dragging && _pl.dragAnchor) {
+      _pl.panX = _pl.dragAnchor.px + cx - _pl.dragAnchor.mx;
+      _pl.panY = _pl.dragAnchor.py + cy - _pl.dragAnchor.my;
+      _plRenderZones();
+    } else if (_pl.drawing) {
+      _pl._drawCurrent = _plCanvasToPx(cx,cy);
+      _plRenderZones();
+    }
+  }
+}
+function _plTouchEnd(e) {
+  e.preventDefault();
+  if (e.touches.length === 0) {
+    if (_pl.dragging) { _pl.dragging=false; _pl.dragAnchor=null; }
+    if (_pl.drawing && _pl.drawStart && _pl._drawCurrent) {
+      const [ex,ey] = _pl._drawCurrent;
+      const [sx,sy] = _pl.drawStart;
+      _pl.drawing = false; _pl.drawStart = null;
+      if (Math.abs(ex-sx)*_pl.zoom >= MIN_ZONE_PX && Math.abs(ey-sy)*_pl.zoom >= MIN_ZONE_PX) {
+        const key   = _plNextKey();
+        const color = PLANNER_COLORS[Object.keys(_pl.zones).length % PLANNER_COLORS.length];
+        const res   = _pl.mapMeta?.resolution || 0.05;
+        const w_m   = Math.abs(ex-sx)*res, h_m = Math.abs(ey-sy)*res;
+        _pl.zones[key] = {key,x1:sx,y1:sy,x2:ex,y2:ey,robot_width:0.30,
+          angle:w_m>=h_m?0:90,rect_angle:0,color,waypoints:[]};
+        _pl.sequence.push(key);
+        _plSelect(key);
+        _plSetStatus(`Zone '${key}' — ${w_m.toFixed(2)}×${h_m.toFixed(2)} m`);
+      }
+      _plRenderZones();
+    }
+    _pl.pinchAnchor = null;
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════
