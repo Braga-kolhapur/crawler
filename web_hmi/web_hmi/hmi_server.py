@@ -27,7 +27,7 @@ ROS2 topics subscribed:
     /map                nav_msgs/OccupancyGrid  live SLAM map
 """
 
-import os, sys, json, threading, base64, io, argparse, socket as _socket, signal as _signal, math as _math
+import os, sys, json, threading, base64, io, argparse, socket as _socket, signal as _signal, math as _math, time as _time
 import subprocess as _subprocess
 from pathlib import Path
 from typing import Any, Dict, List
@@ -48,8 +48,9 @@ try:
     import rclpy
     from rclpy.node import Node
     from std_msgs.msg import Bool, String
-    from geometry_msgs.msg import PoseWithCovarianceStamped, Twist, TwistStamped
+    from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, Twist, TwistStamped
     from nav_msgs.msg import OccupancyGrid
+    from sensor_msgs.msg import LaserScan
     HAS_ROS2 = True
 except ImportError:
     HAS_ROS2 = False
@@ -98,6 +99,12 @@ _st: Dict[str, Any] = {
     "coverage_pct":  0.0,
     "ros_connected": False,
     "live_map_b64":  "",      # latest OccupancyGrid as PNG base64
+    # cus_pose_compute — live integrated pose
+    "cur_pose_x":    None,
+    "cur_pose_y":    None,
+    "cur_pose_yaw":  None,
+    # LiDAR /scan status
+    "scan_on":       False,
 }
 _plan_dir          = "."
 _maps_dir          = "."   # resolved at startup to cus_nav2_config/maps/ (source)
@@ -161,20 +168,29 @@ def _snapshot() -> dict:
             "sequence":      list(_st["sequence"]),
             "visited":       list(_st["visited"]),
             "ros_connected": _st["ros_connected"],
+            "cur_pose_x":    _st["cur_pose_x"],
+            "cur_pose_y":    _st["cur_pose_y"],
+            "cur_pose_yaw":  _st["cur_pose_yaw"],
+            "scan_on":       _st["scan_on"],
         }
 
 
 def _node_status() -> dict:
     def _running(key):
         return key in _procs and _procs[key].poll() is None
+    with _lock:
+        scan_on = _st["scan_on"]
     return {
-        "robot":    _running("robot"),
-        "slam":     _running("slam"),
-        "autonomy": _running("autonomy"),
-        "obstacle": _running("obstacle"),
+        "robot":        _running("robot"),
+        "slam":         _running("slam"),
+        "autonomy":     _running("autonomy"),
+        "obstacle":     _running("obstacle"),
+        "pose_compute": _running("pose_compute"),
+        "pure_pursuit": _running("pure_pursuit"),
         # legacy keys kept for UI back-compat
-        "amcl":     _running("autonomy"),
-        "nav2":     _running("autonomy"),
+        "amcl":         _running("autonomy"),
+        "nav2":         _running("autonomy"),
+        "scan_on":      scan_on,
     }
 
 
@@ -295,9 +311,12 @@ if HAS_ROS2:
     class _Bridge(Node):
         def __init__(self, use_stamped=False):
             super().__init__("coverage_hmi")
-            self._use_stamped = use_stamped
-            self._pub_stop   = self.create_publisher(Bool,   "/coverage_stop",     10)
-            self._pub_seq    = self.create_publisher(String, "/coverage_sequence", 10)
+            self._use_stamped   = use_stamped
+            self._last_scan_t   = 0.0   # wall-clock time of last /scan message
+
+            self._pub_stop      = self.create_publisher(Bool,   "/coverage_stop",     10)
+            self._pub_seq       = self.create_publisher(String, "/coverage_sequence", 10)
+            self._pub_pause_sig = self.create_publisher(Bool,   "/pause_signal",      10)
 
             # TRANSIENT_LOCAL so coverage_path_follower receives the start signal
             # even if it subscribes slightly after the message is published
@@ -318,6 +337,11 @@ if HAS_ROS2:
                                      self._cb_status, 10)
             self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose",
                                      self._cb_pose, 10)
+            # cus_pose_compute live pose
+            self.create_subscription(PoseStamped, "/current_pose",
+                                     self._cb_current_pose, 10)
+            # LiDAR scan — for on/off indicator
+            self.create_subscription(LaserScan, "/scan", self._cb_scan, 10)
 
             # Live SLAM map — use TRANSIENT_LOCAL so we get the last map on subscribe
             try:
@@ -330,6 +354,9 @@ if HAS_ROS2:
             self.create_subscription(OccupancyGrid, "/map", self._cb_map, map_qos)
             self.create_subscription(Bool, "/obstacle_detected",
                                      self._cb_obstacle, 10)
+
+            # 1-Hz timer to check scan liveness
+            self.create_timer(1.0, self._check_scan_liveness)
 
             with _lock:
                 _st["ros_connected"] = True
@@ -357,6 +384,34 @@ if HAS_ROS2:
 
         def _cb_obstacle(self, msg: Bool):
             sio.emit("obstacle_detected", {"detected": msg.data})
+
+        def _cb_current_pose(self, msg: PoseStamped):
+            q = msg.pose.orientation
+            yaw = _math.atan2(
+                2.0 * (q.w * q.z + q.x * q.y),
+                1.0 - 2.0 * (q.y * q.y + q.z * q.z),
+            )
+            with _lock:
+                _st["cur_pose_x"]   = msg.pose.position.x
+                _st["cur_pose_y"]   = msg.pose.position.y
+                _st["cur_pose_yaw"] = yaw
+            sio.emit("current_pose", {
+                "x":   msg.pose.position.x,
+                "y":   msg.pose.position.y,
+                "yaw": yaw,
+            })
+
+        def _cb_scan(self, msg: LaserScan):
+            self._last_scan_t = _time.time()
+
+        def _check_scan_liveness(self):
+            on = (_time.time() - self._last_scan_t) < 1.0
+            with _lock:
+                changed = _st["scan_on"] != on
+                _st["scan_on"] = on
+            if changed:
+                sio.emit("scan_status", {"on": on})
+                sio.emit("node_status", _node_status())
 
         def _cb_map(self, msg: OccupancyGrid):
             """Convert OccupancyGrid to PNG and store as base64."""
@@ -392,9 +447,12 @@ if HAS_ROS2:
 
         def pub_stop(self, flag: bool):
             self._pub_stop.publish(Bool(data=flag))
+            # Mirror to /pause_signal so cus_pure_pursuit also pauses/resumes
+            self._pub_pause_sig.publish(Bool(data=flag))
 
         def pub_start(self):
             self._pub_stop.publish(Bool(data=False))
+            self._pub_pause_sig.publish(Bool(data=False))
             self._pub_start.publish(Bool(data=True))
 
         def pub_seq(self, seq: List[str]):
@@ -743,6 +801,14 @@ def on_set_sim(data):
     _sim_mode    = bool((data or {}).get("sim", False))
     _use_stamped = _sim_mode   # sim → TwistStamped, real → Twist
 
+    # Propagate to a live pure_pursuit node via ros2 param set
+    if "pure_pursuit" in _procs and _procs["pure_pursuit"].poll() is None:
+        val = "true" if _sim_mode else "false"
+        _subprocess.Popen(
+            ["ros2", "param", "set", "/cus_pure_pursuit", "sim_mode", val],
+            stdout=_subprocess.DEVNULL, stderr=_subprocess.DEVNULL,
+        )
+
 
 @sio.on("cmd_vel")
 def on_cmd_vel(data):
@@ -793,6 +859,13 @@ def on_stop_mapping():
 def on_start_robot():
     """Launch robot driver — turtlebot3_gazebo in sim mode, create_bringup + rplidar otherwise."""
     if _sim_mode:
+        # Kill any stray Gazebo processes before launching a fresh instance.
+        # start_new_session=True means old Gazebo survives HMI restarts, so
+        # we must forcibly clean up to avoid multiple publishers on odom→base_footprint.
+        _subprocess.run(["pkill", "-f", "gzserver"], capture_output=True)
+        _subprocess.run(["pkill", "-f", "gzclient"], capture_output=True)
+        _stop_ros_node("robot")   # remove stale handle if any
+        import time as _t; _t.sleep(1.0)  # let Gazebo fully exit before relaunching
         _start_ros_node("robot", [
             "ros2", "launch", "turtlebot3_gazebo", "turtlebot3_world.launch.py",
         ])
@@ -800,9 +873,11 @@ def on_start_robot():
     else:
         _start_ros_node("robot", [
             "ros2", "launch", "create_bringup", "create_2.launch",
+            "use_sim_time:=false",
         ])
         _start_ros_node("rplidar", [
             "ros2", "launch", "rplidar_ros", "rplidar_c1_launch.py",
+            "use_sim_time:=false",
         ])
         _start_ros_node("static_tf", [
             "ros2", "run", "tf2_ros", "static_transform_publisher",
@@ -820,6 +895,10 @@ def on_stop_robot():
     _stop_ros_node("robot")
     _stop_ros_node("rplidar")
     _stop_ros_node("static_tf")
+    # Ensure Gazebo is fully gone (it can outlive the launch process handle)
+    if _sim_mode:
+        _subprocess.run(["pkill", "-f", "gzserver"], capture_output=True)
+        _subprocess.run(["pkill", "-f", "gzclient"], capture_output=True)
     sio.emit("node_status", _node_status())
     sio.emit("toast", "Stopping robot driver...")
 
@@ -897,6 +976,14 @@ def on_start_autonomy(data=None):
 
     _start_ros_node("autonomy", cmd)
 
+    # Launch cus_pose_compute alongside the autonomy stack
+    pose_compute_cmd = [
+        "ros2", "run", "cus_nav2_config", "cus_pose_compute",
+        "--ros-args",
+        "-p", f"use_sim_time:={use_sim}",
+    ]
+    _start_ros_node("pose_compute", pose_compute_cmd)
+
     sio.emit("state", _snapshot())
     sio.emit("node_status", _node_status())
     sio.emit("toast", "Autonomy stack started — set initial pose, then press Start Coverage")
@@ -911,6 +998,8 @@ def on_stop_autonomy():
     if _ros_node:
         _ros_node.pub_stop(True)
         _ros_node.pub_cmdvel(0.0, 0.0)
+    _stop_ros_node("pure_pursuit")
+    _stop_ros_node("pose_compute")
     _stop_ros_node("autonomy")
     sio.emit("state", _snapshot())
     sio.emit("node_status", _node_status())
@@ -918,13 +1007,37 @@ def on_stop_autonomy():
 
 @sio.on("start_coverage")
 def on_start_coverage():
-    """Send /coverage_start=True after AMCL has converged and initial pose is set."""
+    """Launch cus_pure_pursuit and send /coverage_start=True."""
+    use_sim = "true" if _sim_mode else "false"
+
+    # Try to load params file for the pure pursuit node
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        _params_file = os.path.join(
+            get_package_share_directory("cus_nav2_config"),
+            "params", "cus_nodes.yaml",
+        )
+    except Exception:
+        _params_file = ""
+
+    pursuit_cmd = ["ros2", "run", "cus_nav2_config", "cus_pure_pursuit", "--ros-args"]
+    # Load params file FIRST so that individual -p flags below can override it
+    if _params_file and os.path.exists(_params_file):
+        pursuit_cmd += ["--params-file", _params_file]
+    pursuit_cmd += [
+        "-p", f"use_sim_time:={use_sim}",
+        "-p", f"sim_mode:={use_sim}",
+    ]
+
+    _start_ros_node("pure_pursuit", pursuit_cmd)
+
     if _ros_node:
         _ros_node.pub_start()
     with _lock:
         _st["is_running"] = True
         _st["is_paused"]  = False
     sio.emit("state", _snapshot())
+    sio.emit("node_status", _node_status())
     sio.emit("toast", "Coverage started")
 
 

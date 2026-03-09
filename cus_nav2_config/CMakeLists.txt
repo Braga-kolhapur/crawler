@@ -32,6 +32,8 @@ install(
   PROGRAMS
     scripts/ros2_plan_publisher
     scripts/coverage_path_follower
+    scripts/cus_pose_compute
+    scripts/cus_pure_pursuit
     scripts/odom_pose_publisher
     scripts/odom_test
   DESTINATION lib/${PROJECT_NAME}

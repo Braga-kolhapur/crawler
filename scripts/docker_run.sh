@@ -1,5 +1,5 @@
 #!/bin/bash
-sudo docker run --rm \
+sudo docker run --rm --detach \
   --name crawler-container \
   --privileged \
   --network host \

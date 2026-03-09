@@ -26,13 +26,13 @@ controller_server:
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
 
-      desired_linear_vel: 0.18
+      desired_linear_vel: 0.04 #0.18
       max_linear_accel: 0.5
       max_linear_decel: 0.8
 
-      lookahead_dist: 0.40          # 2× wheel track (0.20 m) — standard Pure Pursuit starting point
-      min_lookahead_dist: 0.20      # = wheel track; minimum useful lookahead at near-zero speed
-      max_lookahead_dist: 0.60      # 3× wheel track; cap at higher speeds
+      lookahead_dist: 0.20          # 2× wheel track (0.20 m) — standard Pure Pursuit starting point
+      min_lookahead_dist: 0.10      # = wheel track; minimum useful lookahead at near-zero speed
+      max_lookahead_dist: 0.20      # 3× wheel track; cap at higher speeds
       lookahead_time: 1.5
       use_velocity_scaled_lookahead_dist: true
 

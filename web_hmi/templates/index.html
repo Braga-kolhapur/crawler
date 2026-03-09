@@ -359,7 +359,8 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
   <div id="legend">
     <div class="leg-row"><div class="leg-dot" style="background:var(--green)"></div>Covered</div>
     <div class="leg-row"><div class="leg-dot" style="background:var(--orange)"></div>Remaining</div>
-    <div class="leg-row"><div class="leg-dot" style="background:var(--red)"></div>Robot</div>
+    <div class="leg-row"><div class="leg-dot" style="background:var(--red)"></div>AMCL pose</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#a78bfa"></div>Live pose</div>
   </div>
 </div>
 
@@ -455,6 +456,10 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
     <span class="nd-item"><span class="nd" id="nd-slam"></span>SLAM</span>
     <span class="nd-item"><span class="nd" id="nd-amcl-m"></span>AMCL</span>
     <span class="nd-item"><span class="nd" id="nd-nav2-m"></span>Nav2</span>
+    <span class="nd-item">
+      <span class="nd" id="nd-scan"></span>
+      LiDAR&nbsp;<span id="nd-scan-lbl" style="font-size:9px;color:var(--dim)">off</span>
+    </span>
   </div>
 
   <!-- Action buttons: Robot toggle | Teleop toggle | Mapping toggle -->
@@ -586,10 +591,13 @@ let appSt  = {
   is_running:false, is_paused:false, current_zone:null,
   coverage_pct:0, robot_x:null, robot_y:null,
   sequence:[], visited:[], ros_connected:false,
+  cur_pose_x:null, cur_pose_y:null, cur_pose_yaw:null,
+  scan_on:false,
 };
 let visitedSet  = new Set();   // "zone:idx"
 let mapImg      = null;
-let nodeStatus  = {robot:false, slam:false, amcl:false, nav2:false, obstacle:false};
+let nodeStatus  = {robot:false, slam:false, amcl:false, nav2:false, obstacle:false, scan_on:false};
+let currentPose = {x:null, y:null, yaw:null};  // live pose from /current_pose
 let currentTab  = 'manual';
 
 // Manual-tab state
@@ -616,10 +624,28 @@ socket.on('state',       (s) => applyState(s));
 socket.on('node_status', (ns)=> { nodeStatus={...nodeStatus,...ns}; updateNodeStatusUI(); });
 socket.on('toast',       (m) => toast(m));
 socket.on('obstacle_detected', (d) => setObstacleBanner(d.detected));
+socket.on('current_pose', (d) => {
+  currentPose = {x: d.x, y: d.y, yaw: d.yaw};
+  appSt.cur_pose_x   = d.x;
+  appSt.cur_pose_y   = d.y;
+  appSt.cur_pose_yaw = d.yaw;
+});
+socket.on('scan_status', (d) => {
+  nodeStatus.scan_on = d.on;
+  updateScanStatus(d.on);
+});
 
 function applyState(s) {
   appSt = {...appSt, ...s};
   visitedSet = new Set((s.visited||[]).map(v=>`${v.zone}:${v.idx}`));
+  // Sync live pose from snapshot (populated once socket reconnects)
+  if (s.cur_pose_x !== undefined && s.cur_pose_x !== null) {
+    currentPose = {x: s.cur_pose_x, y: s.cur_pose_y, yaw: s.cur_pose_yaw};
+  }
+  if (s.scan_on !== undefined) {
+    nodeStatus.scan_on = s.scan_on;
+    updateScanStatus(s.scan_on);
+  }
   updateStatusOverlay();
   renderSequence();
   updateButtons();
@@ -843,6 +869,7 @@ function render() {
   }
 
   drawRobot();
+  drawCurrentPose();
 
   pulse = (pulse + 0.055) % (Math.PI * 2);
   requestAnimationFrame(render);
@@ -942,6 +969,53 @@ function drawRobot() {
     ctx.strokeStyle = '#fff';
     ctx.lineWidth   = 2;
     ctx.stroke();
+  }
+}
+
+function drawCurrentPose() {
+  if (currentPose.x === null || currentPose.y === null) return;
+  const [cx, cy] = worldToCanvas(currentPose.x, currentPose.y);
+
+  // Outer pulsing ring in purple
+  const pr    = 6 + 2.5 * Math.abs(Math.sin(pulse));
+  const alpha = 0.5 - 0.3 * Math.abs(Math.sin(pulse));
+  ctx.beginPath();
+  ctx.arc(cx, cy, pr, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(167,139,250,${alpha.toFixed(2)})`;
+  ctx.lineWidth   = 2;
+  ctx.stroke();
+
+  // Filled dot (purple)
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fillStyle   = '#a78bfa';
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth   = 1.5;
+  ctx.stroke();
+
+  // Heading arrow
+  if (currentPose.yaw !== null) {
+    const len = 12;
+    const ex  = cx + len * Math.cos(currentPose.yaw);
+    const ey  = cy - len * Math.sin(currentPose.yaw);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = '#c4b5fd';
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+  }
+}
+
+// ── LiDAR scan status helper ────────────────────────────────────
+function updateScanStatus(on) {
+  const dot = document.getElementById('nd-scan');
+  const lbl = document.getElementById('nd-scan-lbl');
+  if (dot) dot.className = 'nd ' + (on ? 'on' : 'off');
+  if (lbl) {
+    lbl.textContent = on ? 'on' : 'off';
+    lbl.style.color = on ? 'var(--green)' : 'var(--dim)';
   }
 }
 
@@ -1260,6 +1334,8 @@ function updateNodeStatusUI() {
     const el = document.getElementById(id);
     if (el) el.className = 'nd ' + (nodeStatus[k] ? 'on' : 'off');
   }
+  // LiDAR scan status
+  updateScanStatus(nodeStatus.scan_on);
 
   // Robot toggle button
   robotOn = nodeStatus.robot;

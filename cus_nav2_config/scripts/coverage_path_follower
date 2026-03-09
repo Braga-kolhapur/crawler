@@ -2,239 +2,192 @@
 """
 Coverage Path Follower
 ======================
-Bridge between ros2_plan_publisher and Nav2's FollowPath action server.
+Waits for /coverage_start, then builds and publishes /updated_path ONCE on a
+TRANSIENT_LOCAL (latched) topic.  The path is:
 
-Subscribes to:
-  /coverage_path   nav_msgs/Path    — full path from plan publisher
-  /coverage_start  std_msgs/Bool    — True = start following the current path
-  /coverage_stop   std_msgs/Bool    — True  = pause (cancel active goal, remember path)
-                                      False = resume (re-send stored path from current pos)
+    current_pose → start_point (interpolated)  +  full coverage path
 
-Calls Nav2 action:
-  /follow_path     nav2_msgs/action/FollowPath  (controller_server)
+cus_pure_pursuit subscribes to /updated_path and uses its own nearest-point
+logic to advance along the static path, so republishing is unnecessary.
 
-Pause / resume behaviour
-------------------------
-  True  → cancels the active FollowPath goal; robot coasts to a stop.
-  False → re-sends the same full path; Pure Pursuit picks up from the
-          nearest waypoint to the robot's current position automatically.
+Subscribes
+----------
+  /coverage_path   nav_msgs/Path               — full plan from ros2_plan_publisher
+  /current_pose    geometry_msgs/PoseStamped   — live pose from cus_pose_compute
+  /coverage_start  std_msgs/Bool               — True = build & publish /updated_path
+  /coverage_stop   std_msgs/Bool               — True = publish empty path (stop signal)
+  /start_point     geometry_msgs/PoseStamped   — override the coverage start point
 
-Usage:
-  ros2 run cus_nav2_config coverage_path_follower
+Publishes
+---------
+  /updated_path    nav_msgs/Path  — TRANSIENT_LOCAL, published once on start
+
+Parameters
+----------
+  max_interp_dist (float)  max metres between waypoints [default: 0.2]
+  frame_id        (str)    TF frame                     [default: map]
 """
 
+import math
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionClient
-from rclpy.action.client import GoalStatus
 from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
+from geometry_msgs.msg import PoseStamped, Point
 from nav_msgs.msg import Path
-from std_msgs.msg import Bool
-from nav2_msgs.action import FollowPath, NavigateToPose
+from std_msgs.msg import Bool, Header
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Geometry helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def interpolate_segment(x0, y0, x1, y1, max_dist: float) -> list:
+    """Return a list of dicts for a straight segment."""
+    dx, dy = x1 - x0, y1 - y0
+    dist = math.hypot(dx, dy)
+    yaw  = math.atan2(dy, dx)
+    if dist <= max_dist or dist < 1e-6:
+        return [{"x": x1, "y": y1, "yaw": yaw}]
+    n_steps = math.ceil(dist / max_dist)
+    pts = []
+    for i in range(1, n_steps + 1):
+        t = i / n_steps
+        pts.append({"x": x0 + dx * t, "y": y0 + dy * t, "yaw": yaw})
+    return pts
+
+
+def make_pose_stamped(x: float, y: float, yaw: float, header: Header) -> PoseStamped:
+    ps = PoseStamped()
+    ps.header = header
+    ps.pose.position = Point(x=x, y=y, z=0.0)
+    ps.pose.orientation.z = math.sin(yaw / 2.0)
+    ps.pose.orientation.w = math.cos(yaw / 2.0)
+    return ps
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Node
+# ──────────────────────────────────────────────────────────────────────────────
 
 class CoveragePathFollower(Node):
 
     def __init__(self):
-        super().__init__('coverage_path_follower')
+        super().__init__("coverage_path_follower")
 
-        # Action clients
-        self._action_client = ActionClient(self, FollowPath, '/follow_path')
-        self._nav_client    = ActionClient(self, NavigateToPose, '/navigate_to_pose')
+        self.declare_parameter("max_interp_dist", 0.2)
+        self.declare_parameter("frame_id",        "map")
+
+        self._max_dist = self.get_parameter("max_interp_dist").value
+        self._frame_id = self.get_parameter("frame_id").value
 
         # State
-        self._current_path = None
-        self._goal_handle = None
-        self._nav_handle  = None      # handle for NavigateToPose (go-to-start phase)
-        self._is_following = False
-        self._is_navigating_to_start = False
-        self._paused = False          # True while paused (goal cancelled, path retained)
+        self._coverage_path: Path = None
+        self._current_pose: PoseStamped = None
+        self._start_point: PoseStamped  = None
 
-        # TRANSIENT_LOCAL QoS for /coverage_start so the signal is received
-        # even if this node subscribes after the HMI publishes it
+        # TRANSIENT_LOCAL publisher — pure_pursuit receives the path even if it
+        # starts after /coverage_start is processed.
+        _lqos = QoSProfile(depth=1)
+        _lqos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
+        _lqos.reliability = ReliabilityPolicy.RELIABLE
+        self._pub_path = self.create_publisher(Path, "/updated_path", _lqos)
+
+        # TRANSIENT_LOCAL for /coverage_start so we receive it even if published
+        # before this node finishes starting up.
         _start_qos = QoSProfile(depth=1)
         _start_qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
         _start_qos.reliability = ReliabilityPolicy.RELIABLE
 
-        # Subscriptions
-        self.create_subscription(Path, '/coverage_path',  self._cb_path,  10)
-        self.create_subscription(Bool, '/coverage_start', self._cb_start, _start_qos)
-        self.create_subscription(Bool, '/coverage_stop',  self._cb_stop,  10)
+        # /coverage_path is published TRANSIENT_LOCAL by ros2_plan_publisher
+        _path_qos = QoSProfile(depth=1)
+        _path_qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
+        _path_qos.reliability = ReliabilityPolicy.RELIABLE
 
-        self.get_logger().info('Coverage path follower ready — waiting for path and start signal')
+        self.create_subscription(Path,        "/coverage_path",  self._cb_coverage_path, _path_qos)
+        self.create_subscription(PoseStamped, "/current_pose",   self._cb_current_pose,  10)
+        self.create_subscription(Bool,        "/coverage_start", self._cb_start, _start_qos)
+        self.create_subscription(Bool,        "/coverage_stop",  self._cb_stop,  10)
+        self.create_subscription(PoseStamped, "/start_point",    self._cb_start_point, 10)
+
+        self.get_logger().info(
+            "coverage_path_follower ready — waiting for /coverage_path and /coverage_start"
+        )
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
-    def _cb_path(self, msg: Path):
-        """Store the latest path published by ros2_plan_publisher."""
-        self._current_path = msg
+    def _cb_coverage_path(self, msg: Path):
+        self._coverage_path = msg
+
+    def _cb_current_pose(self, msg: PoseStamped):
+        self._current_pose = msg
 
     def _cb_start(self, msg: Bool):
-        """Start following the current path when True is received."""
         if not msg.data:
             return
-        if self._is_following or self._is_navigating_to_start:
-            self.get_logger().info('Already active; ignoring start signal')
+        if not self._coverage_path or not self._coverage_path.poses:
+            self.get_logger().warn("No coverage path yet — ignoring start signal")
             return
-        if not self._current_path or not self._current_path.poses:
-            self.get_logger().warn('No path available yet; ignoring start signal')
-            return
-        # Fresh start: drive to the first waypoint first so we always begin
-        # from waypoint 0 regardless of where the robot currently is.
-        self._navigate_to_start()
+        path = self._build_updated_path()
+        self._pub_path.publish(path)
+        self.get_logger().info(
+            f"Published /updated_path: {len(path.poses)} poses (TRANSIENT_LOCAL)"
+        )
 
     def _cb_stop(self, msg: Bool):
-        """Pause (True) or resume (False) autonomous navigation."""
         if msg.data:
-            # ── PAUSE ────────────────────────────────────────────────────────
-            self._paused = True
-            if self._nav_handle is not None and self._is_navigating_to_start:
-                self.get_logger().info('PAUSE received — cancelling navigate-to-start')
-                self._nav_handle.cancel_goal_async()
-                self._is_navigating_to_start = False
-                self._nav_handle = None
-            elif self._goal_handle is not None and self._is_following:
-                self.get_logger().info('PAUSE received — cancelling active goal')
-                future = self._goal_handle.cancel_goal_async()
-                future.add_done_callback(self._cancel_done_cb)
-            else:
-                pass  # mark paused even if no goal active
-        else:
-            # ── RESUME ───────────────────────────────────────────────────────
-            if not self._paused:
-                return   # spurious False; do nothing
-            self._paused = False
-            if self._current_path and self._current_path.poses and not self._is_following:
-                self.get_logger().info('RESUME received — re-sending coverage path')
-                self._send_goal()
-            else:
-                self.get_logger().info('RESUME received but no path available or already running')
+            h = self._make_header()
+            self._pub_path.publish(Path(header=h))
+            self.get_logger().info("Coverage STOPPED — empty /updated_path published")
 
-    # ── Goal management ───────────────────────────────────────────────────────
-
-    def _navigate_to_start(self):
-        """Drive to the first waypoint of the path before starting FollowPath.
-
-        This ensures the robot always begins coverage from waypoint 0 rather
-        than latching onto the nearest point mid-path (which is what Pure Pursuit
-        does when given the full path cold).
-        """
-        first_pose = self._current_path.poses[0]
-        goal = NavigateToPose.Goal()
-        goal.pose = first_pose
-
+    def _cb_start_point(self, msg: PoseStamped):
+        self._start_point = msg
         self.get_logger().info(
-            f'Navigating to path start  '
-            f'({first_pose.pose.position.x:.2f}, {first_pose.pose.position.y:.2f})'
+            f"Start point updated to "
+            f"({msg.pose.position.x:.2f}, {msg.pose.position.y:.2f})"
         )
 
-        if not self._nav_client.wait_for_server(timeout_sec=5.0):
-            self.get_logger().warn(
-                'NavigateToPose server not available — '
-                'starting FollowPath from nearest point instead'
-            )
-            self._send_goal()
-            return
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
-        self._is_navigating_to_start = True
-        future = self._nav_client.send_goal_async(goal)
-        future.add_done_callback(self._nav_to_start_response_cb)
+    def _make_header(self) -> Header:
+        h = Header()
+        h.stamp    = self.get_clock().now().to_msg()
+        h.frame_id = self._frame_id
+        return h
 
-    def _nav_to_start_response_cb(self, future):
-        handle = future.result()
-        if not handle.accepted:
-            self.get_logger().warn(
-                'NavigateToPose goal rejected — starting from nearest point'
-            )
-            self._is_navigating_to_start = False
-            self._send_goal()
-            return
-        self._nav_handle = handle
-        result_future = handle.get_result_async()
-        result_future.add_done_callback(self._nav_to_start_result_cb)
+    def _get_start_xy(self):
+        if self._start_point is not None:
+            return (self._start_point.pose.position.x,
+                    self._start_point.pose.position.y)
+        if self._coverage_path and self._coverage_path.poses:
+            fp = self._coverage_path.poses[0].pose.position
+            return (fp.x, fp.y)
+        return None
 
-    def _nav_to_start_result_cb(self, future):
-        self._is_navigating_to_start = False
-        self._nav_handle = None
+    def _build_updated_path(self) -> Path:
+        header = self._make_header()
+        path   = Path()
+        path.header = header
 
-        if self._paused:
-            self.get_logger().info('Paused during navigate-to-start; not starting FollowPath')
-            return
+        start_xy = self._get_start_xy()
+        if start_xy is None:
+            return path
 
-        result = future.result()
-        if result.status == GoalStatus.STATUS_SUCCEEDED:
-            self.get_logger().info('Reached path start — beginning coverage path following')
-        else:
-            self.get_logger().warn(
-                f'Navigate-to-start ended with status {result.status} — '
-                'starting FollowPath from nearest point'
-            )
-        self._send_goal()
+        # current_pose → start_point
+        if self._current_pose is not None:
+            rx = self._current_pose.pose.position.x
+            ry = self._current_pose.pose.position.y
+            sx, sy = start_xy
+            for pt in interpolate_segment(rx, ry, sx, sy, self._max_dist):
+                path.poses.append(make_pose_stamped(pt["x"], pt["y"], pt["yaw"], header))
 
-    def _send_goal(self):
-        if not self._action_client.wait_for_server(timeout_sec=5.0):
-            self.get_logger().error(
-                'FollowPath action server not available after 5 s — '
-                'is controller_server running?'
-            )
-            return
+        # Full coverage path
+        for ps in self._coverage_path.poses:
+            p = PoseStamped()
+            p.header = header
+            p.pose   = ps.pose
+            path.poses.append(p)
 
-        goal_msg = FollowPath.Goal()
-        goal_msg.path = self._current_path
-        goal_msg.controller_id = 'FollowPath'    # must match controller_plugins key in yaml
-        goal_msg.goal_checker_id = 'stopped_goal_checker'
-
-        self._is_following = True
-        self.get_logger().info(
-            f'Sending path with {len(self._current_path.poses)} poses to /follow_path'
-        )
-
-        send_future = self._action_client.send_goal_async(
-            goal_msg,
-            feedback_callback=self._feedback_cb,
-        )
-        send_future.add_done_callback(self._goal_response_cb)
-
-    def _goal_response_cb(self, future):
-        handle = future.result()
-        if not handle.accepted:
-            self.get_logger().warn('Goal was REJECTED by controller_server')
-            self._is_following = False
-            return
-        self._goal_handle = handle
-        self.get_logger().info('Goal ACCEPTED — robot is now following the coverage path')
-        result_future = handle.get_result_async()
-        result_future.add_done_callback(self._result_cb)
-
-    def _result_cb(self, future):
-        self._is_following = False
-        self._goal_handle = None
-        result = future.result()
-        status = result.status
-        if status == GoalStatus.STATUS_SUCCEEDED:
-            self._paused = False
-            self.get_logger().info('Coverage path following SUCCEEDED')
-        elif status == GoalStatus.STATUS_CANCELED:
-            # paused → _paused stays True so resume can re-send
-            if not self._paused:
-                self.get_logger().info('Coverage path following CANCELLED (full stop)')
-            else:
-                self.get_logger().info('Coverage path following PAUSED — send resume to continue')
-        else:
-            self._paused = False
-            self.get_logger().warn(f'Coverage path following ended with status {status}')
-
-    def _feedback_cb(self, feedback_msg):
-        fb = feedback_msg.feedback
-        self.get_logger().info(
-            f'Distance to goal: {fb.distance_to_goal:.2f} m  '
-            f'speed: {fb.speed:.3f} m/s',
-            throttle_duration_sec=3.0,
-        )
-
-    def _cancel_done_cb(self, future):
-        # _result_cb will fire after this and set _is_following = False
-        self.get_logger().info('Cancel request accepted by action server')
+        return path
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -251,5 +204,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

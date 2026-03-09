@@ -1,0 +1,82 @@
+{
+  "version": "1.0",
+  "tool": "coverage_path_planner_hmi",
+  "map": {
+    "pgm_file": "map_001.pgm",
+    "yaml_file": "map_001.yaml",
+    "resolution": 0.05,
+    "origin": [
+      -0.937,
+      -2.084,
+      0
+    ],
+    "width_px": 112,
+    "height_px": 103
+  },
+  "sequence": [
+    "a"
+  ],
+  "zones": {
+    "a": {
+      "key": "a",
+      "pixel_bounds": {
+        "x1": 15.605312383090162,
+        "y1": 38.667976056864944,
+        "x2": 29.615787504676394,
+        "y2": 65.24859708193041
+      },
+      "world_bounds": {
+        "x_min": -0.15673438084549196,
+        "y_min": -0.19642985409652058,
+        "x_max": 0.5437893752338196,
+        "y_max": 1.132601197156753
+      },
+      "dimensions_m": {
+        "width": 0.701,
+        "height": 1.329
+      },
+      "path_type": "boustrophedon",
+      "robot_width_m": 0.3,
+      "angle_deg": 90,
+      "rect_angle_deg": 0,
+      "color": "#E74C3C",
+      "waypoints": [
+        {
+          "stripe": 0,
+          "type": "coverage",
+          "x": 0.3938,
+          "y": -0.1964,
+          "yaw": 1.5708
+        },
+        {
+          "stripe": 0,
+          "type": "coverage",
+          "x": 0.3938,
+          "y": 1.1326,
+          "yaw": 1.5708
+        },
+        {
+          "stripe": 1,
+          "type": "transition",
+          "x": 0.0938,
+          "y": 1.1326,
+          "yaw": 3.1416
+        },
+        {
+          "stripe": 1,
+          "type": "coverage",
+          "x": 0.0938,
+          "y": 1.1326,
+          "yaw": -1.5708
+        },
+        {
+          "stripe": 1,
+          "type": "coverage",
+          "x": 0.0938,
+          "y": -0.1964,
+          "yaw": -1.5708
+        }
+      ]
+    }
+  }
+}

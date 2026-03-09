@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""
+Custom Pure Pursuit Node
+========================
+Follows a path published on /updated_path using a simple pure-pursuit controller.
+Respects a pause signal and can publish either Twist or TwistStamped depending
+on whether simulation mode is enabled.
+
+Subscribes
+----------
+  /updated_path   nav_msgs/Path               — path from coverage_path_follower
+  /current_pose   geometry_msgs/PoseStamped   — pose from cus_pose_compute
+  /pause_signal   std_msgs/Bool               — True = stop, False = resume
+
+Publishes
+---------
+  /cmd_vel        geometry_msgs/Twist (real) or geometry_msgs/TwistStamped (sim)
+
+Parameters
+----------
+  lookahead_dist   (float)  lookahead distance in metres         [default: 0.3]
+  max_linear_vel   (float)  max forward velocity m/s            [default: 0.15]
+  max_angular_vel  (float)  max angular velocity rad/s          [default: 1.0]
+  goal_tolerance   (float)  distance threshold to declare goal  [default: 0.15]
+  control_hz       (float)  control loop frequency Hz          [default: 10.0]
+  sim_mode         (bool)   publish TwistStamped if true        [default: false]
+"""
+
+import math
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
+from geometry_msgs.msg import Twist, TwistStamped, PoseStamped
+from nav_msgs.msg import Path
+from std_msgs.msg import Bool
+from rcl_interfaces.msg import SetParametersResult
+
+
+class CusPurePursuit(Node):
+
+    def __init__(self):
+        super().__init__("cus_pure_pursuit")
+
+        # Parameters
+        self.declare_parameter("lookahead_dist",  0.3)
+        self.declare_parameter("max_linear_vel",  0.15)
+        self.declare_parameter("max_angular_vel", 1.0)
+        self.declare_parameter("goal_tolerance",  0.15)
+        self.declare_parameter("control_hz",      10.0)
+        self.declare_parameter("sim_mode",        False)
+
+        self._ld       = self.get_parameter("lookahead_dist").value
+        self._v_max    = self.get_parameter("max_linear_vel").value
+        self._w_max    = self.get_parameter("max_angular_vel").value
+        self._goal_tol = self.get_parameter("goal_tolerance").value
+        self._sim      = self.get_parameter("sim_mode").value
+
+        # State
+        self._path: Path          = None
+        self._pose: PoseStamped   = None
+        self._paused: bool        = False
+        self._path_active: bool   = False   # True once a new path arrives
+
+        # Publisher (type depends on sim_mode; recreated on parameter change)
+        self._pub = self._make_cmdvel_pub()
+
+        # React to runtime parameter changes (e.g. ros2 param set ... sim_mode true)
+        self.add_on_set_parameters_callback(self._on_param_change)
+
+        # /updated_path is published TRANSIENT_LOCAL (latched) by coverage_path_follower,
+        # so the subscriber must also use TRANSIENT_LOCAL to receive it after it was published.
+        _path_qos = QoSProfile(depth=1)
+        _path_qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
+        _path_qos.reliability = ReliabilityPolicy.RELIABLE
+
+        self.create_subscription(Path,        "/updated_path", self._cb_path,  _path_qos)
+        self.create_subscription(PoseStamped, "/current_pose", self._cb_pose,  10)
+        self.create_subscription(Bool,        "/pause_signal", self._cb_pause, 10)
+
+        # Control loop
+        hz = self.get_parameter("control_hz").value
+        self.create_timer(1.0 / max(1.0, hz), self._control_loop)
+
+        self.get_logger().info(
+            f"cus_pure_pursuit ready  "
+            f"(ld={self._ld} m, v_max={self._v_max} m/s, "
+            f"w_max={self._w_max} rad/s, goal_tol={self._goal_tol} m)"
+        )
+
+    # ── Publisher helpers ──────────────────────────────────────────────────────
+
+    def _make_cmdvel_pub(self):
+        if self._sim:
+            self.get_logger().info("cmd_vel → TwistStamped (sim_mode=true)")
+            return self.create_publisher(TwistStamped, "/cmd_vel", 10)
+        self.get_logger().info("cmd_vel → Twist (sim_mode=false)")
+        return self.create_publisher(Twist, "/cmd_vel", 10)
+
+    def _on_param_change(self, params):
+        for p in params:
+            if p.name == "sim_mode":
+                new_sim = bool(p.value)
+                if new_sim != self._sim:
+                    self._sim = new_sim
+                    self.destroy_publisher(self._pub)
+                    self._pub = self._make_cmdvel_pub()
+        return SetParametersResult(successful=True)
+
+    # ── Callbacks ─────────────────────────────────────────────────────────────
+
+    def _cb_path(self, msg: Path):
+        self._path        = msg
+        self._path_active = bool(msg.poses)
+
+    def _cb_pose(self, msg: PoseStamped):
+        self._pose = msg
+
+    def _cb_pause(self, msg: Bool):
+        self._paused = msg.data
+        if self._paused:
+            self._publish_zero()
+            self.get_logger().info("Pure pursuit PAUSED")
+        else:
+            self.get_logger().info("Pure pursuit RESUMED")
+
+    # ── Control loop ──────────────────────────────────────────────────────────
+
+    def _control_loop(self):
+        # Always publish zero when paused
+        if self._paused:
+            self._publish_zero()
+            return
+
+        if not self._path_active:
+            return
+
+        if self._path is None or not self._path.poses:
+            return
+
+        if self._pose is None:
+            return
+
+        rx, ry, ryaw = self._robot_state()
+
+        # ── Check if already at goal (end of path) ────────────────────────────
+        final = self._path.poses[-1].pose.position
+        dist_to_final = math.hypot(final.x - rx, final.y - ry)
+        if dist_to_final < self._goal_tol:
+            self.get_logger().info("Pure pursuit: path completed", throttle_duration_sec=3.0)
+            self._publish_zero()
+            self._path_active = False
+            return
+
+        # ── Find lookahead point ──────────────────────────────────────────────
+        goal = self._find_lookahead(rx, ry)
+        if goal is None:
+            # All points are within lookahead — head straight for the final point
+            goal = (final.x, final.y)
+
+        # ── Pure pursuit geometry ─────────────────────────────────────────────
+        dx = goal[0] - rx
+        dy = goal[1] - ry
+        chord = math.hypot(dx, dy)
+        if chord < 1e-6:
+            self._publish_zero()
+            return
+
+        angle_to_goal = math.atan2(dy, dx)
+        alpha = angle_to_goal - ryaw
+        alpha = math.atan2(math.sin(alpha), math.cos(alpha))  # normalise
+
+        # Curvature: κ = 2·sin(α) / chord
+        curvature = 2.0 * math.sin(alpha) / chord
+
+        # Scale linear velocity down on tight turns
+        alpha_ratio = min(abs(alpha) / math.pi, 1.0)
+        linear_vel  = self._v_max * (1.0 - 0.8 * alpha_ratio)
+        linear_vel  = max(0.0, linear_vel)
+
+        angular_vel = curvature * linear_vel
+        angular_vel = max(-self._w_max, min(self._w_max, angular_vel))
+
+        self._publish_vel(linear_vel, angular_vel)
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _robot_state(self):
+        p   = self._pose.pose
+        q   = p.orientation
+        yaw = math.atan2(
+            2.0 * (q.w * q.z + q.x * q.y),
+            1.0 - 2.0 * (q.y * q.y + q.z * q.z),
+        )
+        return p.position.x, p.position.y, yaw
+
+    def _find_lookahead(self, rx, ry):
+        """Find the nearest point, then the first path point beyond lookahead."""
+        poses = self._path.poses
+
+        # Find nearest waypoint index
+        min_dist  = float("inf")
+        nearest_i = 0
+        for i, ps in enumerate(poses):
+            d = math.hypot(ps.pose.position.x - rx, ps.pose.position.y - ry)
+            if d < min_dist:
+                min_dist  = d
+                nearest_i = i
+
+        # Scan forward from nearest for the first point ≥ lookahead distance
+        for ps in poses[nearest_i:]:
+            d = math.hypot(ps.pose.position.x - rx, ps.pose.position.y - ry)
+            if d >= self._ld:
+                return (ps.pose.position.x, ps.pose.position.y)
+
+        return None  # all remaining points are within lookahead
+
+    def _publish_vel(self, linear_x: float, angular_z: float):
+        if self._sim:
+            msg = TwistStamped()
+            msg.header.stamp    = self.get_clock().now().to_msg()
+            msg.header.frame_id = "base_link"
+            msg.twist.linear.x  = float(linear_x)
+            msg.twist.angular.z = float(angular_z)
+        else:
+            msg = Twist()
+            msg.linear.x  = float(linear_x)
+            msg.angular.z = float(angular_z)
+        self._pub.publish(msg)
+
+    def _publish_zero(self):
+        self._publish_vel(0.0, 0.0)
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = CusPurePursuit()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

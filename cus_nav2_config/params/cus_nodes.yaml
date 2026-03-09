@@ -1,0 +1,33 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters for custom navigation nodes (cus_pose_compute + cus_pure_pursuit)
+# ──────────────────────────────────────────────────────────────────────────────
+
+# cus_pose_compute node has no tunable ROS parameters — it subscribes to
+# /amcl_pose and /odom automatically.
+
+cus_pure_pursuit:
+  ros__parameters:
+    # How far ahead on the path the robot aims for (metres)
+    lookahead_dist: 0.15
+
+    # Maximum forward velocity (m/s)
+    max_linear_vel: 0.08
+
+    # Maximum angular velocity (rad/s)
+    max_angular_vel: 1.0
+
+    # Distance from path end at which the robot considers the path complete (m)
+    goal_tolerance: 0.10
+
+    # Control loop frequency (Hz)
+    control_hz: 10.0
+
+    # sim_mode is intentionally omitted here — it is passed at launch time
+    # via -p sim_mode:=true/false based on the HMI's sim checkbox.
+
+coverage_path_follower:
+  ros__parameters:
+    # Maximum distance between consecutive waypoints in the generated path (m)
+    max_interp_dist: 0.2
+
+    frame_id: "map"
