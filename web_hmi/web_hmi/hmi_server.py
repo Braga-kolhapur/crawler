@@ -881,7 +881,7 @@ def on_start_robot():
         ])
         _start_ros_node("static_tf", [
             "ros2", "run", "tf2_ros", "static_transform_publisher",
-            "0.11", "0", "0.15", "0", "0", "0", "base_link", "laser",
+            "0.11", "0", "0.15", "3.14159", "0", "0", "base_link", "laser",
         ])
         sio.emit("toast", "Starting Create 2 + RPLidar...")
     sio.emit("node_status", _node_status())
