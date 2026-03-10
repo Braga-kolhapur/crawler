@@ -134,6 +134,20 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration("use_sim_time")),
     )
 
+    # ── Roomba brush/vacuum motor controller (real robot only) ───────────────
+    roomba_motor_node = Node(
+        package="cus_nav2_config",
+        executable="roomba_motor_controller",
+        name="roomba_motor_controller",
+        output="screen",
+        parameters=[{
+            "use_sim_time":     LaunchConfiguration("use_sim_time"),
+            "motor_duty_cycle": 0.5,
+            "cmd_vel_timeout":  0.5,
+        }],
+        condition=UnlessCondition(LaunchConfiguration("use_sim_time")),
+    )
+
     # ── Static TF: base_link → laser (real robot only) ───────────────────────
     static_tf_node = Node(
         package="tf2_ros",
@@ -157,6 +171,8 @@ def generate_launch_description():
         path_follower_node,
         # Obstacle detection (real robot only)
         obstacle_detector_node,
+        # Roomba motors (real robot only)
+        roomba_motor_node,
         # TF (real robot only)
         static_tf_node,
     ])

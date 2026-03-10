@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""
+Roomba Motor Controller
+=======================
+Turns the Roomba Create 2 brush and vacuum motors ON whenever the robot
+is moving (non-zero cmd_vel) and OFF when it stops.
+
+Subscribes
+----------
+  /cmd_vel   geometry_msgs/Twist  — velocity commands from cus_pure_pursuit
+
+Publishes
+---------
+  /main_brush_motor   create_msgs/msg/MotorSetpoint
+  /vacuum_motor       create_msgs/msg/MotorSetpoint
+
+Parameters
+----------
+  motor_duty_cycle  (float)  duty cycle when motors are ON  [default: 0.5]
+  cmd_vel_timeout   (float)  seconds of zero-vel before motors turn off
+                             (guards against missed messages)  [default: 0.5]
+"""
+
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+
+try:
+    from create_msgs.msg import MotorSetpoint
+except ImportError:
+    raise SystemExit(
+        "[roomba_motor_controller] create_msgs is not installed — "
+        "source the create3_ros2 workspace first."
+    )
+
+
+class RoombaMotorController(Node):
+
+    def __init__(self):
+        super().__init__("roomba_motor_controller")
+
+        self.declare_parameter("motor_duty_cycle", 0.5)
+        self.declare_parameter("cmd_vel_timeout",  0.5)
+
+        self._duty      = self.get_parameter("motor_duty_cycle").value
+        self._timeout   = self.get_parameter("cmd_vel_timeout").value
+
+        self._motors_on = False   # current motor state
+
+        self._pub_brush   = self.create_publisher(MotorSetpoint, "/main_brush_motor", 10)
+        self._pub_vacuum  = self.create_publisher(MotorSetpoint, "/vacuum_motor",     10)
+
+        self.create_subscription(Twist, "/cmd_vel", self._cb_cmd_vel, 10)
+
+        # Watchdog timer: if no cmd_vel arrives for _timeout seconds, motors off
+        self._watchdog = self.create_timer(self._timeout, self._watchdog_cb)
+        self._watchdog.cancel()   # starts inactive; armed on first non-zero vel
+
+        self.get_logger().info(
+            f"roomba_motor_controller ready  "
+            f"(duty={self._duty}, timeout={self._timeout} s)"
+        )
+
+    # ── Callbacks ─────────────────────────────────────────────────────────────
+
+    def _cb_cmd_vel(self, msg: Twist):
+        moving = (
+            abs(msg.linear.x)  > 1e-4 or
+            abs(msg.linear.y)  > 1e-4 or
+            abs(msg.angular.z) > 1e-4
+        )
+
+        if moving:
+            # Reset watchdog every time a non-zero velocity arrives
+            self._watchdog.reset()
+            if not self._motors_on:
+                self._set_motors(True)
+        else:
+            # Zero velocity — cancel watchdog and turn off immediately
+            self._watchdog.cancel()
+            if self._motors_on:
+                self._set_motors(False)
+
+    def _watchdog_cb(self):
+        """Called if no cmd_vel arrived for _timeout seconds while motors were on."""
+        self._watchdog.cancel()
+        if self._motors_on:
+            self.get_logger().warn(
+                "cmd_vel timeout — turning motors off"
+            )
+            self._set_motors(False)
+
+    # ── Motor control ─────────────────────────────────────────────────────────
+
+    def _set_motors(self, on: bool):
+        duty = float(self._duty) if on else 0.0
+
+        brush_msg = MotorSetpoint()
+        brush_msg.duty_cycle = duty
+        self._pub_brush.publish(brush_msg)
+
+        vac_msg = MotorSetpoint()
+        vac_msg.duty_cycle = duty
+        self._pub_vacuum.publish(vac_msg)
+
+        self._motors_on = on
+        state = "ON" if on else "OFF"
+        self.get_logger().info(f"Roomba motors {state}  (duty={duty:.2f})")
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = RoombaMotorController()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # Ensure motors are off on shutdown
+        node._set_motors(False)
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

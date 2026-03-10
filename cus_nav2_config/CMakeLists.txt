@@ -36,6 +36,7 @@ install(
     scripts/cus_pure_pursuit
     scripts/odom_pose_publisher
     scripts/odom_test
+    scripts/roomba_motor_controller
   DESTINATION lib/${PROJECT_NAME}
 )
 
