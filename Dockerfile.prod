@@ -89,7 +89,10 @@ RUN source /opt/ros/jazzy/setup.bash && \
 # Copy and build FREQUENTLY CHANGING packages (web_hmi, behavior_tree, etc.)
 # Only this layer rebuilds when you change these packages
 # ========================================================================
-
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libpcl-dev && \
+    rm -rf /var/lib/apt/lists/*
 # Copy frequently changing packages
 COPY web_hmi/ /home/ubuntu/ros2_ws/src/web_hmi/
 COPY create_behavior_tree/ /home/ubuntu/ros2_ws/src/create_behavior_tree/

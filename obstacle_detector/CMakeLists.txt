@@ -9,7 +9,6 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(pcl_conversions REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common filters segmentation kdtree)
 
@@ -22,7 +21,6 @@ ament_target_dependencies(obstacle_detector_node
   rclcpp
   sensor_msgs
   std_msgs
-  pcl_conversions
   visualization_msgs
 )
 
