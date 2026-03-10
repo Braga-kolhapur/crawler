@@ -64,6 +64,7 @@ class CusPurePursuit(Node):
         self._path_active: bool   = False   # True once a new path arrives
         self._obstacle: bool      = False   # /obstacle_detected
         self._in_vicinity: bool   = False   # /obstacle_in_vicinity
+        self._nearest_i: int      = 0       # monotonically advancing path cursor
 
         # Publisher (type depends on sim_mode; recreated on parameter change)
         self._pub = self._make_cmdvel_pub()
@@ -117,6 +118,7 @@ class CusPurePursuit(Node):
     def _cb_path(self, msg: Path):
         self._path        = msg
         self._path_active = bool(msg.poses)
+        self._nearest_i   = 0   # reset cursor for the new path
 
     def _cb_pose(self, msg: PoseStamped):
         self._pose = msg
@@ -221,20 +223,32 @@ class CusPurePursuit(Node):
         return p.position.x, p.position.y, yaw
 
     def _find_lookahead(self, rx, ry):
-        """Find the nearest point, then the first path point beyond lookahead."""
+        """Advance a monotonic cursor to the nearest point ahead, then find lookahead.
+
+        The cursor (_nearest_i) only ever moves forward along the path.  This
+        prevents the algorithm from jumping to a geometrically closer point on
+        an adjacent parallel stripe — a common failure mode on boustrophedon
+        coverage paths.
+        """
         poses = self._path.poses
+        n     = len(poses)
 
-        # Find nearest waypoint index
-        min_dist  = float("inf")
-        nearest_i = 0
-        for i, ps in enumerate(poses):
-            d = math.hypot(ps.pose.position.x - rx, ps.pose.position.y - ry)
-            if d < min_dist:
-                min_dist  = d
-                nearest_i = i
+        # 1. Advance cursor while the next point is closer than the current one.
+        #    Stop one before the end so there is always a point to aim at.
+        while self._nearest_i < n - 1:
+            d_cur  = math.hypot(
+                poses[self._nearest_i    ].pose.position.x - rx,
+                poses[self._nearest_i    ].pose.position.y - ry)
+            d_next = math.hypot(
+                poses[self._nearest_i + 1].pose.position.x - rx,
+                poses[self._nearest_i + 1].pose.position.y - ry)
+            if d_next < d_cur:
+                self._nearest_i += 1
+            else:
+                break
 
-        # Scan forward from nearest for the first point ≥ lookahead distance
-        for ps in poses[nearest_i:]:
+        # 2. Scan forward from cursor for the first point ≥ lookahead distance
+        for ps in poses[self._nearest_i:]:
             d = math.hypot(ps.pose.position.x - rx, ps.pose.position.y - ry)
             if d >= self._ld:
                 return (ps.pose.position.x, ps.pose.position.y)
