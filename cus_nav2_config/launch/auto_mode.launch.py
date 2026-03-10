@@ -28,11 +28,13 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import UnlessCondition
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch_ros.actions import Node, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 
 def generate_launch_description():
-    pkg_dir = get_package_share_directory("cus_nav2_config")
+    pkg_dir          = get_package_share_directory("cus_nav2_config")
+    obs_pkg_dir      = get_package_share_directory("obstacle_detector")
 
     # ── Launch arguments ──────────────────────────────────────────────────────
 
@@ -123,6 +125,16 @@ def generate_launch_description():
         }],
     )
 
+    # ── Obstacle detector (real robot only — no sensor in sim) ───────────────
+    obstacle_detector_node = Node(
+        package="obstacle_detector",
+        executable="obstacle_detector_node",
+        name="obstacle_detector_node",
+        output="screen",
+        parameters=[os.path.join(obs_pkg_dir, "config", "params.yaml")],
+        condition=UnlessCondition(LaunchConfiguration("use_sim_time")),
+    )
+
     # ── Static TF: base_link → laser (real robot only) ───────────────────────
     static_tf_node = Node(
         package="tf2_ros",
@@ -144,6 +156,8 @@ def generate_launch_description():
         # Coverage
         plan_publisher_node,
         path_follower_node,
+        # Obstacle detection (real robot only)
+        obstacle_detector_node,
         # TF (real robot only)
         static_tf_node,
     ])

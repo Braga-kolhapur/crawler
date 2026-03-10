@@ -8,9 +8,11 @@ on whether simulation mode is enabled.
 
 Subscribes
 ----------
-  /updated_path   nav_msgs/Path               — path from coverage_path_follower
-  /current_pose   geometry_msgs/PoseStamped   — pose from cus_pose_compute
-  /pause_signal   std_msgs/Bool               — True = stop, False = resume
+  /updated_path        nav_msgs/Path               — path from coverage_path_follower
+  /current_pose        geometry_msgs/PoseStamped   — pose from cus_pose_compute
+  /pause_signal        std_msgs/Bool               — True = stop, False = resume
+  /obstacle_detected   std_msgs/Bool               — True = publish zero velocity
+  /obstacle_in_vicinity std_msgs/Bool              — True = halve linear & angular limits
 
 Publishes
 ---------
@@ -60,6 +62,8 @@ class CusPurePursuit(Node):
         self._pose: PoseStamped   = None
         self._paused: bool        = False
         self._path_active: bool   = False   # True once a new path arrives
+        self._obstacle: bool      = False   # /obstacle_detected
+        self._in_vicinity: bool   = False   # /obstacle_in_vicinity
 
         # Publisher (type depends on sim_mode; recreated on parameter change)
         self._pub = self._make_cmdvel_pub()
@@ -73,9 +77,11 @@ class CusPurePursuit(Node):
         _path_qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
         _path_qos.reliability = ReliabilityPolicy.RELIABLE
 
-        self.create_subscription(Path,        "/updated_path", self._cb_path,  _path_qos)
-        self.create_subscription(PoseStamped, "/current_pose", self._cb_pose,  10)
-        self.create_subscription(Bool,        "/pause_signal", self._cb_pause, 10)
+        self.create_subscription(Path,        "/updated_path",         self._cb_path,     _path_qos)
+        self.create_subscription(PoseStamped, "/current_pose",         self._cb_pose,     10)
+        self.create_subscription(Bool,        "/pause_signal",         self._cb_pause,    10)
+        self.create_subscription(Bool,        "/obstacle_detected",    self._cb_obstacle, 10)
+        self.create_subscription(Bool,        "/obstacle_in_vicinity", self._cb_vicinity, 10)
 
         # Control loop
         hz = self.get_parameter("control_hz").value
@@ -123,11 +129,27 @@ class CusPurePursuit(Node):
         else:
             self.get_logger().info("Pure pursuit RESUMED")
 
+    def _cb_obstacle(self, msg: Bool):
+        self._obstacle = msg.data
+        if self._obstacle:
+            self._publish_zero()
+            self.get_logger().warn("Pure pursuit STOPPED — obstacle detected")
+        else:
+            self.get_logger().info("Pure pursuit RESUMING — obstacle cleared")
+
+    def _cb_vicinity(self, msg: Bool):
+        prev = self._in_vicinity
+        self._in_vicinity = msg.data
+        if self._in_vicinity and not prev:
+            self.get_logger().info("Obstacle in vicinity — velocities halved")
+        elif not self._in_vicinity and prev:
+            self.get_logger().info("Vicinity clear — normal velocities restored")
+
     # ── Control loop ──────────────────────────────────────────────────────────
 
     def _control_loop(self):
-        # Always publish zero when paused
-        if self._paused:
+        # Always publish zero when paused or obstacle is blocking
+        if self._paused or self._obstacle:
             self._publish_zero()
             return
 
@@ -172,13 +194,18 @@ class CusPurePursuit(Node):
         # Curvature: κ = 2·sin(α) / chord
         curvature = 2.0 * math.sin(alpha) / chord
 
+        # Halve velocity limits when an object is in the vicinity
+        vel_factor  = 0.5 if self._in_vicinity else 1.0
+        v_lim       = self._v_max * vel_factor
+        w_lim       = self._w_max * vel_factor
+
         # Scale linear velocity down on tight turns
         alpha_ratio = min(abs(alpha) / math.pi, 1.0)
-        linear_vel  = self._v_max * (1.0 - 0.8 * alpha_ratio)
+        linear_vel  = v_lim * (1.0 - 0.8 * alpha_ratio)
         linear_vel  = max(0.0, linear_vel)
 
         angular_vel = curvature * linear_vel
-        angular_vel = max(-self._w_max, min(self._w_max, angular_vel))
+        angular_vel = max(-w_lim, min(w_lim, angular_vel))
 
         self._publish_vel(linear_vel, angular_vel)
 

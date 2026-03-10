@@ -145,6 +145,13 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
 
 /* Node status row in auto tab */
 #auto-nd-row{display:flex;gap:14px;padding-top:6px;flex-shrink:0}
+#obs-status-row{display:flex;gap:10px;padding-top:8px;flex-shrink:0;flex-wrap:wrap}
+.obs-stat-item{display:flex;flex-direction:column;align-items:center;gap:3px}
+.obs-stat-lbl{font-size:9px;letter-spacing:.6px;color:var(--dim);text-transform:uppercase}
+.obs-stat-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;min-width:52px;text-align:center;background:var(--surf2);color:var(--dim)}
+.obs-stat-badge.ok{background:#1a3a1a;color:var(--green)}
+.obs-stat-badge.warn{background:#3a2a00;color:var(--orange)}
+.obs-stat-badge.alert{background:#3a1a1a;color:var(--red)}
 .auto-nd-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--dim)}
 
 /* ── MANUAL TAB — split view (left=map, right=joystick) ─────────── */
@@ -412,6 +419,22 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
         🛡 Obstacle Detector
       </button>
     </div>
+
+    <!-- Live obstacle / localisation status row -->
+    <div id="obs-status-row">
+      <div class="obs-stat-item">
+        <span class="obs-stat-lbl">OBSTACLE</span>
+        <span class="obs-stat-badge" id="obs-det-badge">—</span>
+      </div>
+      <div class="obs-stat-item">
+        <span class="obs-stat-lbl">VICINITY</span>
+        <span class="obs-stat-badge" id="obs-vic-badge">—</span>
+      </div>
+      <div class="obs-stat-item">
+        <span class="obs-stat-lbl">LOC. ERR</span>
+        <span class="obs-stat-badge" id="amcl-cov-badge">—</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -623,7 +646,11 @@ socket.on('disconnect',  ()  => { appSt.ros_connected=false; updateRos(false); }
 socket.on('state',       (s) => applyState(s));
 socket.on('node_status', (ns)=> { nodeStatus={...nodeStatus,...ns}; updateNodeStatusUI(); });
 socket.on('toast',       (m) => toast(m));
-socket.on('obstacle_detected', (d) => setObstacleBanner(d.detected));
+socket.on('obstacle_detected', (d) => {
+  setObstacleBanner(d.detected);
+  appSt.obstacle_detected = d.detected;
+  updateObstacleStatus();
+});
 socket.on('current_pose', (d) => {
   currentPose = {x: d.x, y: d.y, yaw: d.yaw};
   appSt.cur_pose_x   = d.x;
@@ -647,6 +674,7 @@ function applyState(s) {
     updateScanStatus(s.scan_on);
   }
   updateStatusOverlay();
+  updateObstacleStatus();
   renderSequence();
   updateButtons();
 }
@@ -1282,6 +1310,48 @@ function updateStatusOverlay() {
   document.getElementById('ms-zone').textContent = z ? z.toUpperCase() : '—';
   document.getElementById('ms-bar') .style.width = pct + '%';
   document.getElementById('ms-pct') .textContent = pct.toFixed(1) + ' %';
+}
+
+function updateObstacleStatus() {
+  // /obstacle_detected
+  const detEl = document.getElementById('obs-det-badge');
+  if (detEl) {
+    const det = appSt.obstacle_detected;
+    if (det === undefined || det === null) {
+      detEl.textContent = '—'; detEl.className = 'obs-stat-badge';
+    } else if (det) {
+      detEl.textContent = 'YES'; detEl.className = 'obs-stat-badge alert';
+    } else {
+      detEl.textContent = 'CLEAR'; detEl.className = 'obs-stat-badge ok';
+    }
+  }
+
+  // /obstacle_in_vicinity
+  const vicEl = document.getElementById('obs-vic-badge');
+  if (vicEl) {
+    const vic = appSt.obstacle_vicinity;
+    if (vic === undefined || vic === null) {
+      vicEl.textContent = '—'; vicEl.className = 'obs-stat-badge';
+    } else if (vic) {
+      vicEl.textContent = 'NEAR'; vicEl.className = 'obs-stat-badge warn';
+    } else {
+      vicEl.textContent = 'CLEAR'; vicEl.className = 'obs-stat-badge ok';
+    }
+  }
+
+  // AMCL covariance (position uncertainty in metres)
+  const covEl = document.getElementById('amcl-cov-badge');
+  if (covEl) {
+    const cov = appSt.amcl_cov;
+    if (cov === undefined || cov === null) {
+      covEl.textContent = '—'; covEl.className = 'obs-stat-badge';
+    } else {
+      covEl.textContent = cov.toFixed(3) + ' m';
+      if      (cov < 0.10) { covEl.className = 'obs-stat-badge ok'; }
+      else if (cov < 0.30) { covEl.className = 'obs-stat-badge warn'; }
+      else                 { covEl.className = 'obs-stat-badge alert'; }
+    }
+  }
 }
 
 function updateRos(connected) {

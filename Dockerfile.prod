@@ -96,6 +96,7 @@ COPY create_behavior_tree/ /home/ubuntu/ros2_ws/src/create_behavior_tree/
 COPY simple_teleop/ /home/ubuntu/ros2_ws/src/simple_teleop/
 COPY scripts/ /home/ubuntu/ros2_ws/src/scripts/
 COPY cus_nav2_config/ /home/ubuntu/ros2_ws/src/cus_nav2_config/
+COPY obstacle_detector/ /home/ubuntu/ros2_ws/src/obstacle_detector/
 
 # Build the remaining packages (only these rebuild on changes)
 RUN source /opt/ros/jazzy/setup.bash && \
@@ -105,6 +106,7 @@ RUN source /opt/ros/jazzy/setup.bash && \
         web_hmi \
         create_behavior_tree \
         simple_teleop \
+        obstacle_detector \
         cus_nav2_config && \
     echo "Development packages built"
 
@@ -113,7 +115,7 @@ RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc && \
     echo "if [ -f install/setup.bash ]; then source install/setup.bash; fi" >> /root/.bashrc
 
 # Expose web_hmi port
-EXPOSE 5002
+EXPOSE 5006
 
 # Default command
 CMD ["bash"]

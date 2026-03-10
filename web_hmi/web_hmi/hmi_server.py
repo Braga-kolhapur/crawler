@@ -104,7 +104,12 @@ _st: Dict[str, Any] = {
     "cur_pose_y":    None,
     "cur_pose_yaw":  None,
     # LiDAR /scan status
-    "scan_on":       False,
+    "scan_on":            False,
+    # Obstacle detector topics
+    "obstacle_detected":  False,
+    "obstacle_vicinity":  False,
+    # AMCL localisation quality (sqrt of xy position variance, metres — lower is better)
+    "amcl_cov":           None,
 }
 _plan_dir          = "."
 _maps_dir          = "."   # resolved at startup to cus_nav2_config/maps/ (source)
@@ -168,10 +173,13 @@ def _snapshot() -> dict:
             "sequence":      list(_st["sequence"]),
             "visited":       list(_st["visited"]),
             "ros_connected": _st["ros_connected"],
-            "cur_pose_x":    _st["cur_pose_x"],
-            "cur_pose_y":    _st["cur_pose_y"],
-            "cur_pose_yaw":  _st["cur_pose_yaw"],
-            "scan_on":       _st["scan_on"],
+            "cur_pose_x":         _st["cur_pose_x"],
+            "cur_pose_y":         _st["cur_pose_y"],
+            "cur_pose_yaw":       _st["cur_pose_yaw"],
+            "scan_on":            _st["scan_on"],
+            "obstacle_detected":  _st["obstacle_detected"],
+            "obstacle_vicinity":  _st["obstacle_vicinity"],
+            "amcl_cov":           _st["amcl_cov"],
         }
 
 
@@ -354,6 +362,8 @@ if HAS_ROS2:
             self.create_subscription(OccupancyGrid, "/map", self._cb_map, map_qos)
             self.create_subscription(Bool, "/obstacle_detected",
                                      self._cb_obstacle, 10)
+            self.create_subscription(Bool, "/obstacle_in_vicinity",
+                                     self._cb_vicinity, 10)
 
             # 1-Hz timer to check scan liveness
             self.create_timer(1.0, self._check_scan_liveness)
@@ -376,14 +386,29 @@ if HAS_ROS2:
         def _cb_pose(self, msg: PoseWithCovarianceStamped):
             rx = msg.pose.pose.position.x
             ry = msg.pose.pose.position.y
+            # Position uncertainty: sqrt(var_x + var_y) — lower = better localisation
+            import math as _math2
+            cov_score = round(_math2.sqrt(
+                max(0.0, msg.pose.covariance[0]) +
+                max(0.0, msg.pose.covariance[7])
+            ), 3)
             with _lock:
-                _st["robot_x"] = rx
-                _st["robot_y"] = ry
+                _st["robot_x"]   = rx
+                _st["robot_y"]   = ry
+                _st["amcl_cov"]  = cov_score
                 _mark_visited(rx, ry)
             sio.emit("state", _snapshot())
 
         def _cb_obstacle(self, msg: Bool):
+            with _lock:
+                _st["obstacle_detected"] = bool(msg.data)
             sio.emit("obstacle_detected", {"detected": msg.data})
+            sio.emit("state", _snapshot())
+
+        def _cb_vicinity(self, msg: Bool):
+            with _lock:
+                _st["obstacle_vicinity"] = bool(msg.data)
+            sio.emit("state", _snapshot())
 
         def _cb_current_pose(self, msg: PoseStamped):
             q = msg.pose.orientation
