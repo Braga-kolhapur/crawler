@@ -2,8 +2,8 @@
   "version": "1.0",
   "tool": "coverage_path_planner_hmi",
   "map": {
-    "pgm_file": "map_002.pgm",
-    "yaml_file": "map_002.yaml",
+    "pgm_file": "map_001.pgm",
+    "yaml_file": "map_001.yaml",
     "resolution": 0.05,
     "origin": [
       -4.135,
@@ -20,82 +20,166 @@
     "a": {
       "key": "a",
       "pixel_bounds": {
-        "x1": 69.587822671156,
-        "y1": 58.480920314253645,
-        "x2": 117.51618032173587,
-        "y2": 78.03292181069959
+        "x1": 68.89571642349419,
+        "y1": 58.82697343808454,
+        "x2": 126.51356154133931,
+        "y2": 84.95398428731762
       },
       "world_bounds": {
-        "x_min": -0.6556088664421993,
-        "y_min": -0.22564609053497975,
-        "x_max": 1.7408090160867946,
-        "y_max": 0.7519539842873177
+        "x_min": -0.6902141788252898,
+        "y_min": -0.5716992143658812,
+        "x_max": 2.1906780770669663,
+        "y_max": 0.7346513280957727
       },
       "dimensions_m": {
-        "width": 2.396,
-        "height": 0.978
+        "width": 2.881,
+        "height": 1.306
       },
       "path_type": "boustrophedon",
-      "robot_width_m": 0.3,
-      "angle_deg": 24,
+      "robot_width_m": 0.2,
+      "angle_deg": 25,
       "rect_angle_deg": -25,
       "color": "#E74C3C",
       "waypoints": [
         {
           "stripe": 0,
           "type": "coverage",
-          "x": -0.4002,
-          "y": -0.5502,
-          "yaw": 0.4189
+          "x": -0.3215,
+          "y": -1.0287,
+          "yaw": 0.4363
         },
         {
           "stripe": 0,
           "type": "coverage",
-          "x": 1.7894,
-          "y": 0.4246,
-          "yaw": 0.4189
+          "x": 2.2896,
+          "y": 0.1889,
+          "yaw": 0.4363
         },
         {
           "stripe": 1,
           "type": "transition",
-          "x": 1.6626,
-          "y": 0.6966,
-          "yaw": 2.0071
+          "x": 2.205,
+          "y": 0.3701,
+          "yaw": 2.0072
         },
         {
           "stripe": 1,
           "type": "coverage",
-          "x": 1.6626,
-          "y": 0.6966,
-          "yaw": -2.7227
+          "x": 2.205,
+          "y": 0.3701,
+          "yaw": -2.7053
         },
         {
           "stripe": 1,
           "type": "coverage",
-          "x": -0.527,
-          "y": -0.2783,
-          "yaw": -2.7227
+          "x": -0.406,
+          "y": -0.8474,
+          "yaw": -2.7053
         },
         {
           "stripe": 2,
           "type": "transition",
-          "x": -0.6538,
-          "y": -0.0064,
+          "x": -0.4905,
+          "y": -0.6661,
           "yaw": 2.0071
         },
         {
           "stripe": 2,
           "type": "coverage",
-          "x": -0.6538,
-          "y": -0.0064,
-          "yaw": 0.4189
+          "x": -0.4905,
+          "y": -0.6661,
+          "yaw": 0.4363
         },
         {
           "stripe": 2,
           "type": "coverage",
-          "x": 1.5358,
-          "y": 0.9685,
-          "yaw": 0.4189
+          "x": 2.1205,
+          "y": 0.5514,
+          "yaw": 0.4363
+        },
+        {
+          "stripe": 3,
+          "type": "transition",
+          "x": 2.036,
+          "y": 0.7326,
+          "yaw": 2.0072
+        },
+        {
+          "stripe": 3,
+          "type": "coverage",
+          "x": 2.036,
+          "y": 0.7326,
+          "yaw": -2.7053
+        },
+        {
+          "stripe": 3,
+          "type": "coverage",
+          "x": -0.575,
+          "y": -0.4849,
+          "yaw": -2.7053
+        },
+        {
+          "stripe": 4,
+          "type": "transition",
+          "x": -0.6596,
+          "y": -0.3036,
+          "yaw": 2.0071
+        },
+        {
+          "stripe": 4,
+          "type": "coverage",
+          "x": -0.6596,
+          "y": -0.3036,
+          "yaw": 0.4363
+        },
+        {
+          "stripe": 4,
+          "type": "coverage",
+          "x": 1.9514,
+          "y": 0.9139,
+          "yaw": 0.4363
+        },
+        {
+          "stripe": 5,
+          "type": "transition",
+          "x": 1.8669,
+          "y": 1.0952,
+          "yaw": 2.0072
+        },
+        {
+          "stripe": 5,
+          "type": "coverage",
+          "x": 1.8669,
+          "y": 1.0952,
+          "yaw": -2.7053
+        },
+        {
+          "stripe": 5,
+          "type": "coverage",
+          "x": -0.7441,
+          "y": -0.1224,
+          "yaw": -2.7053
+        },
+        {
+          "stripe": 6,
+          "type": "transition",
+          "x": -0.8286,
+          "y": 0.0589,
+          "yaw": 2.0071
+        },
+        {
+          "stripe": 6,
+          "type": "coverage",
+          "x": -0.8286,
+          "y": 0.0589,
+          "yaw": 0.4363
+        },
+        {
+          "stripe": 6,
+          "type": "coverage",
+          "x": 1.7824,
+          "y": 1.2764,
+          "yaw": 0.4363
         }
       ]
     }
