@@ -1,4 +1,6 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -6,24 +8,29 @@ import os
 def generate_launch_description():
     pkg_dir     = get_package_share_directory('cus_nav2_config')
     obs_pkg_dir = get_package_share_directory('obstacle_detector')
-
-    map_file = os.path.join(pkg_dir, 'maps', 'map123.yaml')
     params_file = os.path.join(pkg_dir, 'params', 'localization.yaml')
 
+    map_arg = DeclareLaunchArgument(
+        'map',
+        default_value=os.path.join(pkg_dir, 'maps', 'map_001.yaml'),
+        description='Full path to the map yaml file',
+    )
+
     return LaunchDescription([
+        map_arg,
         Node(
             package='nav2_map_server',
             executable='map_server',
             name='map_server',
-            parameters=[params_file, {'yaml_filename': map_file}],
-            output='screen'
+            parameters=[params_file, {'yaml_filename': LaunchConfiguration('map')}],
+            output='screen',
         ),
         Node(
             package='nav2_amcl',
             executable='amcl',
             name='amcl',
             parameters=[params_file],
-            output='screen'
+            output='screen',
         ),
         Node(
             package='nav2_lifecycle_manager',
@@ -33,8 +40,8 @@ def generate_launch_description():
             parameters=[{
                 'use_sim_time': False,
                 'autostart': True,
-                'node_names': ['map_server', 'amcl']
-            }]
+                'node_names': ['map_server', 'amcl'],
+            }],
         ),
         Node(
             package='obstacle_detector',
@@ -44,4 +51,3 @@ def generate_launch_description():
             parameters=[os.path.join(obs_pkg_dir, 'config', 'params.yaml')],
         ),
     ])
-
